@@ -1,6 +1,7 @@
 import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, CreateDateColumn, Index } from 'typeorm';
 import { User } from 'src/modules/users/entities/user.entity';
 import { Group } from '../../groups/entities/group.entity';
+import { IsString } from 'class-validator';
 
 const numericTransformer = {
   to: (value: number) => value,
@@ -14,10 +15,14 @@ export class Bill {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @ManyToOne(() => User, { nullable: false, onDelete: 'CASCADE' })
+  @Column({ default: 'Untitled Bill'})
+  @IsString()
+  title: string;
+
+  @ManyToOne(() => User ,(user) => user.creditorBills, { nullable: false, onDelete: 'CASCADE' })
   creditor: User;
 
-  @ManyToOne(() => User, { nullable: false, onDelete: 'CASCADE' })
+  @ManyToOne(() => User,(user) => user.debtorBills , { nullable: false, onDelete: 'CASCADE' })
   debtor: User;
 
   @ManyToOne(() => Group, (group) => group.bills, { nullable: true, onDelete: 'SET NULL' })
@@ -31,6 +36,10 @@ export class Bill {
 
   @Column({ default: false })
   isPaid: boolean;
+
+
+  @Column({ nullable: true  })
+  referenceId: string;
 
   @CreateDateColumn()
   createdAt: Date;

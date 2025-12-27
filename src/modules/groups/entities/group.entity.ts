@@ -2,6 +2,7 @@ import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, OneToMany } from 'ty
 import { Bill } from '../../bills-management/entities/bill.entity';
 import { User } from 'src/modules/users/entities/user.entity';
 import { Friendship } from 'src/modules/friendship/entities/friendship.entity';
+import { GroupMembership } from 'src/modules/friendship/entities/groupMembership.entity';
 
 @Entity()
 export class Group {
@@ -20,6 +21,6 @@ export class Group {
   @OneToMany(() => Bill, (bill) => bill.group)
   bills: Bill[];
 
-  @OneToMany(() => Friendship, (friendship) => friendship.group)
-  members: Friendship[];
+  @OneToMany(() => GroupMembership, gm => gm.group)
+  members: GroupMembership[];
 }

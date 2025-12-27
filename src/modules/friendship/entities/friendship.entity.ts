@@ -19,12 +19,7 @@ export class Friendship {
     onDelete: 'CASCADE',
   })
   friend: User;
-
-  @ManyToOne(() => Group, (group) => group.members, {
-    nullable: true,
-    onDelete: 'SET NULL',
-  })
-  group?: Group;
+    // ...existing code...
   
   @Index()
   @Column({ default: false })

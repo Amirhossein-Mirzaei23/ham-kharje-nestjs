@@ -96,14 +96,13 @@ async listFriends(
   // Get all friendships
   const [friendships, totalCount] = await this.friendshipRepo.findAndCount({
     where: [
-      { user: { id: userId }, isAccepted: true },
+      // { user: { id: userId }, isAccepted: true },
       { friend: { id: userId }, isAccepted: true },
     ],
-    skip: (page - 1) * limit,
+    skip: (page - 1) * 100,
     take: limit,
     relations: ['user', 'friend'],
   });
-console.log('friendships',friendships);
 
   const friends = friendships.map((fs) =>
     fs.user.id === userId ? fs.friend : fs.user

@@ -8,7 +8,4 @@ export class UpdateGroupDto {
   @IsOptional()
   @IsString()
   image?: string;
-
-  @IsInt()
-  ownerId: number; // required for authorization check
 }

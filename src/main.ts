@@ -8,7 +8,7 @@ async function bootstrap() {
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
     credentials: true, // اگر نیاز به ارسال کوکی یا auth هست
   });
-  process.env.SERVER_URL = 'http://localhost:3000';
+  process.env.SERVER_URL = 'https://dong-api.liara.run';
   await app.listen(process.env.PORT ?? 3000);
 }
 bootstrap();

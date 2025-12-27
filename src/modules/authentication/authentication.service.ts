@@ -16,8 +16,13 @@ export class AuthenticationService {
   ) {}
 
   async register(payload: RegisterDto): Promise<any> {
-    const isUserExist = await this.usersService.findOneByPhone(payload.phone)     
-    if (isUserExist) throw new BadRequestException(`کاربری قبلا با این شماره تلفن ثبت نام کرده است.`);
+    const isUserPhoneExist = await this.usersService.findOneByPhone(payload.phone)     
+    
+    if (payload.email) {
+      const isUserEmailExist = await this.usersService.findOneByEmail(payload.email)    
+     if (isUserEmailExist)  throw new BadRequestException(`کاربری قبلا با این ایمیل ثبت نام کرده است.`);
+    }
+    if (isUserPhoneExist) throw new BadRequestException(`کاربری قبلا با این شماره تلفن ثبت نام کرده است.`);
     await this.usersService.create(payload)
     const userData =  await this.usersService.findOneByPhone(payload.phone)
 

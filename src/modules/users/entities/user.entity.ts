@@ -2,6 +2,9 @@ import { Length } from 'class-validator';
 import { Entity, PrimaryGeneratedColumn, Column, OneToMany } from 'typeorm';
 import { Index } from 'typeorm';
 import { Friendship } from '../../friendship/entities/friendship.entity';
+import { GroupMembership } from 'src/modules/friendship/entities/groupMembership.entity';
+import { Group } from 'src/modules/groups/entities/group.entity';
+import { Bill } from 'src/modules/bills-management/entities/bill.entity';
 
 @Index('idx_users_friends', { synchronize: false })
 @Entity()
@@ -46,5 +49,22 @@ sentFriendRequests: Friendship[];
 
 @OneToMany(() => Friendship, (f) => f.friend)
 receivedFriendRequests: Friendship[];
+
+@OneToMany(() => GroupMembership, m => m.user)
+groupMemberships: GroupMembership[];
+
+@OneToMany(() => Group, group => group.owner)
+ownedGroups: Group[];
+
+
+@OneToMany(() => Bill, (bill) => bill.creditor)
+creditorBills: Bill[];
+
+@OneToMany(() => Bill, (bill) => bill.debtor)
+debtorBills: Bill[];
+
+@Column({ nullable: true})
+subscription:string
+
 
 }

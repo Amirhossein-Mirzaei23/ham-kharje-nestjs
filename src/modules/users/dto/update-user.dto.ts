@@ -18,4 +18,7 @@ export class UpdateUserDto {
 
   @IsString()
   password?: string;
+
+  @IsString()
+  subscription?: string;
 }

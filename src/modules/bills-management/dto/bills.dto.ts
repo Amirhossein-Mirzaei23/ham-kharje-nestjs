@@ -1,17 +1,23 @@
-import { IsNumber, IsOptional, IsBoolean } from 'class-validator';
-import { PrimaryGeneratedColumn } from 'typeorm';
+import { IsNumber, IsOptional, IsBoolean, IsString } from 'class-validator';
 
 export class CreateBillDto {
   @IsNumber()
   creditorId: number;
 
-  @IsNumber()
-  debtorId: number;
+  @IsString()
+  title:string
 
-  @PrimaryGeneratedColumn()
+  @IsNumber()
+  debtorId?: number;
+
+  @IsOptional()
   @IsNumber()
   groupId?: number;
 
   @IsNumber()
   amount: number;
+  @IsOptional()
+  @IsString()
+  referenceId: string;
+
 }

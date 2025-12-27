@@ -12,20 +12,33 @@ import { GroupsModule } from './modules/groups/groups.module';
 import { UploadModule } from './modules/upload/upload.module';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { join } from 'path';
+import { PushModule } from './push/push.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot(),  // Loads .env
     TypeOrmModule.forRoot({
       type: 'postgres',
-      host: process.env.DATABASE_HOST,
-      port: process.env.DATABASE_PORT?  +process.env.DATABASE_PORT : 5432,
-      username: process.env.DATABASE_USERNAME,
-      password: process.env.DATABASE_PASSWORD,
-      database: process.env.DATABASE_NAME,
+      host: 'etna.liara.cloud',
+      port: 33274,
+      username: 'root',
+      password: 'LlkaosWk8pQPy5p66PBnlYUW',
+      database: 'postgres',
       entities: [__dirname + '/**/*.entity{.ts,.js}'],  // Auto-load entities
       synchronize: true,  // Auto-create tables (use false in production)
     }),
+
+
+    // TypeOrmModule.forRoot({
+    //   type: 'postgres',
+    //   host: process.env.DATABASE_HOST,
+    //   port: process.env.DATABASE_PORT?  +process.env.DATABASE_PORT : 5432,
+    //   username: process.env.DATABASE_USERNAME,
+    //   password: process.env.DATABASE_PASSWORD,
+    //   database: process.env.DATABASE_NAME,
+    //   entities: [__dirname + '/**/*.entity{.ts,.js}'],  // Auto-load entities
+    //   synchronize: true,  // Auto-create tables (use false in production)
+    // }),
     ServeStaticModule.forRoot({
       rootPath: join(__dirname, '..', 'uploads'),
       serveRoot: '/uploads', // URL prefix
@@ -36,6 +49,7 @@ import { join } from 'path';
     FriendshipModule,
     BillModule,
     GroupsModule,
+    PushModule,
     UploadModule
   ],
   controllers: [AppController],
