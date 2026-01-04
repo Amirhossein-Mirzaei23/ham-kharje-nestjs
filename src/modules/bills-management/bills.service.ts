@@ -18,9 +18,9 @@ export class BillService {
   ) {}
 
   async createBill(dto: CreateBillDto) {
-    const creditor = await this.userRepo.findOne({
-      where: { id: dto.creditorId },
-    });
+    const creditor = await this.userRepo.findOneBy(
+       { id: dto.creditorId },
+    );
     if (!creditor) throw new NotFoundException('Creditor not found');
       // No group, debtorId is required
       if (!dto.debtorId) throw new NotFoundException('Debtor id is required if no group');
@@ -42,8 +42,8 @@ export class BillService {
         group:group,
         title:dto.title,
         amount: dto.amount,
-        paid: 0,
-        isPaid: false,
+        paid: dto.paid ? dto.paid : 0,
+        isPaid: dto.isPaid ? dto.isPaid : false,
         referenceId:dto.referenceId
       });
       const data = await this.billRepo.save(bill);
@@ -100,8 +100,6 @@ export class BillService {
       bills.push(bill);
     }
     const data  = this.billRepo.save(bills);
-    console.log(data);
-    
     return data;
   }
   async payBill(billId: number, amount: number) {

@@ -5,9 +5,10 @@ import { User } from '../users/entities/user.entity';
 import { FriendshipService } from './friendship.service';
 import { FriendshipController } from './friendship.controller';
 import { Bill } from '../bills-management/entities/bill.entity';
+import { UsersModule } from '../users/users.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Friendship, User, Bill])],
+  imports: [TypeOrmModule.forFeature([Friendship, User, Bill]),UsersModule],
   providers: [FriendshipService],
   controllers: [FriendshipController],
 })

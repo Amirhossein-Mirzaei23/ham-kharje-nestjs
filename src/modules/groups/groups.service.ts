@@ -42,7 +42,16 @@ export class GroupsService {
       image: dto.image,
       owner,
     });
-    return this.groupRepo.save(group);
+
+
+    const createdGroup  = await this.groupRepo.save(group);
+    const memberships:GroupMembership[] = []
+      memberships.push(
+          this.groupMembershipRepo.create({ group:createdGroup, user: owner }),
+        );
+    await this.groupMembershipRepo.save(memberships);
+
+    return createdGroup
   }
 
   async update(groupId: number, dto: UpdateGroupDto) {
@@ -177,9 +186,6 @@ export class GroupsService {
       where: { id: groupId },
       relations: ['owner'],
     });
-    console.log(groupId);
-    
-
     const groupMembers = await this.groupMembershipRepo.find({
       where: { group: { id: groupId } },
       relations: ['user'],
@@ -189,7 +195,7 @@ export class GroupsService {
     if (!groupMembers.length) throw new NotFoundException('members not found');
 
     try {
-
+let creditorBill
 const batchReferenceId = uuidv4(); 
       await Promise.all(
         groupMembers.map(async (member) => {
@@ -197,18 +203,23 @@ const batchReferenceId = uuidv4();
             creditorId: dto.creditorId,
             debtorId: member.user.id,
             title: dto.title,
-            amount: dto.amount,
+            amount:  dto.amount / groupMembers.length,
             groupId: group.id,
             referenceId: batchReferenceId, 
+            totalAmount:dto.amount
           };
+          if (dto.creditorId === member.user.id) {
+             payload.paid = payload.amount
+             payload.isPaid = true
+          }
+        const bill =  await this.billService.createBill(payload);
 
-          await this.billService.createBill(payload);
         }),
       );
     } catch (err) {
       errors.push(err);
     }
-
+    
     return {
       data: { group: group, members: groupMembers },
       errors,
@@ -286,9 +297,11 @@ const batchReferenceId = uuidv4();
       relations: ['user'],
     });
 
+
     if (!group) throw new NotFoundException('Group not found');
+    
     const data = {
-        group: {
+      group: {
       id: group.id,
       name: group.name,
       owner: group.owner,

@@ -41,6 +41,10 @@ export class Bill {
   @Column({ nullable: true  })
   referenceId: string;
 
+  @Column({ type: 'numeric', default: 0 })
+  totalAmount: number;
+
+
   @CreateDateColumn()
   createdAt: Date;
 }

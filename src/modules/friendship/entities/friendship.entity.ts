@@ -10,13 +10,13 @@ export class Friendship {
 
   // user who sent the request
   @ManyToOne(() => User, (user) => user.sentFriendRequests, {
-    onDelete: 'CASCADE',
+    onDelete: 'CASCADE',  eager: true
   })
   user: User;
 
   // user who received the request
   @ManyToOne(() => User, (user) => user.receivedFriendRequests, {
-    onDelete: 'CASCADE',
+    onDelete: 'CASCADE',  eager: true
   })
   friend: User;
     // ...existing code...

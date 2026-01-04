@@ -6,9 +6,8 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { diskStorage } from 'multer';
 import { UploadService } from './upload.service';
-import { UploadResponseDto } from './dto/upload-response.dto'; 
+import { UploadResponseDto } from './dto/upload-response.dto';
 
 @Controller('upload')
 export class UploadController {
@@ -17,41 +16,29 @@ export class UploadController {
   @Post('image')
   @UseInterceptors(
     FileInterceptor('file', {
-      storage: diskStorage({
-        destination: './uploads/images',
-        filename: (req, file, cb) => {
-          const uploadService = new UploadService();
-
-          const uniqueName = uploadService.generateFilename(file.originalname);
-          cb(null, uniqueName);
-        },
-      }),
-
+      storage: require('multer').memoryStorage(), // store in memory
+      limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
       fileFilter: (req, file, cb) => {
-        if (!file.mimetype.match(/^image\/(jpeg|png|webp|jpg|svg\+xml)$/)) {
+        if (!file.mimetype.match(/^image\/(jpeg|png|webp|jpg)$/)) {
           cb(new Error('Invalid image type!'), false);
         } else cb(null, true);
       },
-
-      limits: {
-        fileSize: 5 * 1024 * 1024, // 5MB
-      },
     }),
   )
-  uploadImage(
+  async uploadImage(
     @UploadedFile() file: Express.Multer.File,
-  ): UploadResponseDto {
+  ): Promise<UploadResponseDto> {
     if (!file) throw new BadRequestException(`ارسال فایل الزامی میباشد`);
-    const filePath = `/uploads/images/${file.filename}`;
 
-    const fullURL = this.uploadService.generateFullImageURL(file.filename);
+    // Upload to FTP
+    const fullURL = await this.uploadService.uploadToFTP(file);
 
     return {
-      message: 'Image uploaded successfully',
-      filePath,
-      filename: file.filename,
+      message: 'Image uploaded successfully to FTP',
+      filePath: fullURL,
+      filename: file.originalname,
       size: file.size,
-      fullURL: fullURL   
+      fullURL,
     };
   }
 }

@@ -5,6 +5,7 @@ import { Friendship } from '../../friendship/entities/friendship.entity';
 import { GroupMembership } from 'src/modules/friendship/entities/groupMembership.entity';
 import { Group } from 'src/modules/groups/entities/group.entity';
 import { Bill } from 'src/modules/bills-management/entities/bill.entity';
+import { PushSubscriptionDto } from 'src/push/dto/subscribe.dto';
 
 @Index('idx_users_friends', { synchronize: false })
 @Entity()
@@ -63,8 +64,10 @@ creditorBills: Bill[];
 @OneToMany(() => Bill, (bill) => bill.debtor)
 debtorBills: Bill[];
 
-@Column({ nullable: true})
-subscription:string
-
+@Column({
+  type: 'json',
+  nullable: true,
+})
+subscription: PushSubscriptionDto | null;
 
 }

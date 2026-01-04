@@ -13,11 +13,27 @@ export class CreateBillDto {
   @IsOptional()
   @IsNumber()
   groupId?: number;
+  
 
   @IsNumber()
   amount: number;
+
+  @IsOptional()
+  @IsNumber()
+  paid?: number;
+
+
+  @IsOptional()
+  @IsBoolean()
+  isPaid?: boolean;
+
+
   @IsOptional()
   @IsString()
   referenceId: string;
+  
+  @IsOptional()
+  @IsNumber()
+  totalAmount
 
 }

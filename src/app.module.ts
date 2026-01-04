@@ -2,10 +2,10 @@ import { MiddlewareConsumer, Module, NestModule, RequestMethod } from '@nestjs/c
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
-import { UsersModule } from "./modules/users/users.module"
-import { ConfigModule } from '@nestjs/config';  // For .env support
+import { UsersModule } from './modules/users/users.module';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { LoggerMiddleware } from './middlewares/logger.middleware';
-import { AuthModule } from './modules/authentication/authentication.module'; 
+import { AuthModule } from './modules/authentication/authentication.module';
 import { FriendshipModule } from './modules/friendship/friendship.module';
 import { BillModule } from './modules/bills-management/bills.module';
 import { GroupsModule } from './modules/groups/groups.module';
@@ -16,54 +16,53 @@ import { PushModule } from './push/push.module';
 
 @Module({
   imports: [
-    ConfigModule.forRoot(),  // Loads .env
-    TypeOrmModule.forRoot({
-      type: 'postgres',
-      host: 'etna.liara.cloud',
-      port: 33274,
-      username: 'root',
-      password: 'LlkaosWk8pQPy5p66PBnlYUW',
-      database: 'postgres',
-      entities: [__dirname + '/**/*.entity{.ts,.js}'],  // Auto-load entities
-      synchronize: true,  // Auto-create tables (use false in production)
+    // ConfigModule for .env support
+    ConfigModule.forRoot({
+      isGlobal: true,
+      envFilePath: process.env.NODE_ENV === 'production' ? '.env.production' : '.env',
     }),
 
+    // TypeORM config using env variables
+    TypeOrmModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        type: 'postgres',
+        host: config.get<string>('DATABASE_HOST', 'localhost'),
+        port: Number(config.get<number>('DATABASE_PORT', 5432)),
+        username: config.get<string>('DATABASE_USERNAME', 'postgres'),
+        password: config.get<string>('DATABASE_PASSWORD', 'postgres'),
+        database: config.get<string>('DATABASE_NAME', 'mydb'),
+        entities: [__dirname + '/**/*.entity{.ts,.js}'],
+        synchronize: config.get<string>('NODE_ENV') !== 'production', // Only sync in dev
+      }),
+    }),
 
-    // TypeOrmModule.forRoot({
-    //   type: 'postgres',
-    //   host: process.env.DATABASE_HOST,
-    //   port: process.env.DATABASE_PORT?  +process.env.DATABASE_PORT : 5432,
-    //   username: process.env.DATABASE_USERNAME,
-    //   password: process.env.DATABASE_PASSWORD,
-    //   database: process.env.DATABASE_NAME,
-    //   entities: [__dirname + '/**/*.entity{.ts,.js}'],  // Auto-load entities
-    //   synchronize: true,  // Auto-create tables (use false in production)
-    // }),
+    // Serve static uploads
     ServeStaticModule.forRoot({
       rootPath: join(__dirname, '..', 'uploads'),
-      serveRoot: '/uploads', // URL prefix
+      serveRoot: '/uploads',
     }),
 
+    // Modules
     UsersModule,
     AuthModule,
     FriendshipModule,
     BillModule,
     GroupsModule,
     PushModule,
-    UploadModule
+    UploadModule,
   ],
   controllers: [AppController],
   providers: [AppService],
 })
-export class AppModule  implements NestModule  {
-
+export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
     consumer
       .apply(LoggerMiddleware)
       .forRoutes({
-        path:'users/*splat',
-        method:RequestMethod.ALL
+        path: 'users/*splat',
+        method: RequestMethod.ALL,
       });
   }
-
 }

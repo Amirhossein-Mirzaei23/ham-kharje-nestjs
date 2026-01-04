@@ -14,56 +14,67 @@ import {
   UpdateFriendDto,
 } from './dto/update-friend.dto';
 import { Bill } from '../bills-management/entities/bill.entity';
+import { log } from 'util';
+import { UsersService } from '../users/users.service';
 
 @Injectable()
 export class FriendshipService {
-constructor(
-  @InjectRepository(Friendship)
-  private friendshipRepo: Repository<Friendship>,
+  constructor(
+    @InjectRepository(Friendship)
+    private friendshipRepo: Repository<Friendship>,
 
-  @InjectRepository(Bill)
-  private billRepo: Repository<Bill>,
+    @InjectRepository(Bill)
+    private billRepo: Repository<Bill>,
 
-  @InjectRepository(User)
-  private userRepo: Repository<User>,
-) {}
+    @InjectRepository(User)
+    private userRepo: Repository<User>,
+
+    private readonly usersService: UsersService,
+  ) {}
 
   async sendFriendRequest(dto: SendFriendRequestDto) {
     const { senderId, receiverId } = dto;
 
     if (senderId === receiverId)
-      throw new BadRequestException("شما نمیتوانید به خودتان درخواست بدهید.");
+      throw new BadRequestException('شما نمیتوانید به خودتان درخواست بدهید.');
 
-    const sender = await this.userRepo.findOne({ where: { id: senderId } });
-    const receiver = await this.userRepo.findOne({ where: { id: receiverId } });
+    const sender = await this.usersService.findOne(senderId);
+    const receiver = await this.usersService.findOne(receiverId);
 
-    if (!sender || !receiver) throw new NotFoundException('کاربر مد نظر یافت نشد');
+    if (!sender || !receiver)
+      throw new NotFoundException('کاربر مد نظر یافت نشد');
 
     // check existing
     const existing = await this.friendshipRepo.findOne({
       where: { user: { id: senderId }, friend: { id: receiverId } },
     });
-
     if (existing) throw new BadRequestException('درخواست قبلا ارسال شده است.');
-
     const friendship = this.friendshipRepo.create({
       user: sender,
       friend: receiver,
     });
 
-    return this.friendshipRepo.save(friendship);
+    const saved = await this.friendshipRepo.save(friendship);
+
+    return saved;
+    // return this.friendshipRepo.save(friendship);
   }
 
   async acceptRequest(dto: AcceptFriendRequestDto) {
     const friendship = await this.friendshipRepo.findOne({
       where: { id: dto.friendshipId },
     });
-
     if (!friendship) throw new NotFoundException('درخواست یافت نشد');
     if (friendship.isAccepted)
       throw new BadRequestException('شما قبلا این درخواست را تایید کرده اید');
 
     friendship.isAccepted = true;
+    const retrunFriendship = this.friendshipRepo.create({
+      user: friendship.friend,
+      friend: friendship.user,
+      isAccepted: true,
+    });
+    const saved = await this.friendshipRepo.save(retrunFriendship);
     return this.friendshipRepo.save(friendship);
   }
   async deleteRequest(friendshipId: number) {
@@ -87,59 +98,55 @@ constructor(
     return this.friendshipRepo.remove(friendship);
   }
 
-async listFriends(
-  userId: number,
-  options: { page: number; limit: number }
-) {
-  const { page, limit } = options;
+  async listFriends(userId: number, options: { page: number; limit: number }) {
+    const { page, limit } = options;
 
-  // Get all friendships
-  const [friendships, totalCount] = await this.friendshipRepo.findAndCount({
-    where: [
-      // { user: { id: userId }, isAccepted: true },
-      { friend: { id: userId }, isAccepted: true },
-    ],
-    skip: (page - 1) * 100,
-    take: limit,
-    relations: ['user', 'friend'],
-  });
-
-  const friends = friendships.map((fs) =>
-    fs.user.id === userId ? fs.friend : fs.user
-  );
-
-  // ------- Debt Calculation For Each Friend -------
-  const results:Array<any> = [];
-
-  for (const friendInfo of friends) {
-    const friendId = friendInfo.id;
-    
-    const debtRows = await this.billRepo
-      .createQueryBuilder('bill')
-      .select([
-        `SUM(CASE WHEN bill.creditorId = :friendId AND bill.debtorId = :userId THEN bill.amount - bill.paid ELSE 0 END) AS youOwe`,
-        `SUM(CASE WHEN bill.creditorId = :userId AND bill.debtorId = :friendId THEN bill.amount - bill.paid ELSE 0 END) AS owesYou`,
-      ])
-      .setParameters({ userId, friendId })
-      .getRawOne();
-
-    const youOwe = parseFloat(debtRows.youOwe) || 0;
-    const owesYou = parseFloat(debtRows.owesYou) || 0;
-    
-    results.push({
-      friendInfo,
-      youOwe,
-      owesYou,
-      net: owesYou - youOwe, // positive → they owe you
+    // Get all friendships
+    const [friendships, totalCount] = await this.friendshipRepo.findAndCount({
+      where: [
+        // { user: { id: userId }, isAccepted: true },
+        { friend: { id: userId }, isAccepted: true },
+      ],
+      skip: (page - 1) * 100,
+      take: limit,
+      relations: ['user', 'friend'],
     });
+
+    const friends = friendships.map((fs) =>
+      fs.user.id === userId ? fs.friend : fs.user,
+    );
+
+    // ------- Debt Calculation For Each Friend -------
+    const results: Array<any> = [];
+
+    for (const friendInfo of friends) {
+      const friendId = friendInfo.id;
+
+      const debtRows = await this.billRepo
+        .createQueryBuilder('bill')
+        .select([
+          `SUM(CASE WHEN bill.creditorId = :friendId AND bill.debtorId = :userId THEN bill.amount - bill.paid ELSE 0 END) AS youOwe`,
+          `SUM(CASE WHEN bill.creditorId = :userId AND bill.debtorId = :friendId THEN bill.amount - bill.paid ELSE 0 END) AS owesYou`,
+        ])
+        .setParameters({ userId, friendId })
+        .getRawOne();
+
+      const youOwe = parseFloat(debtRows.youOwe) || 0;
+      const owesYou = parseFloat(debtRows.owesYou) || 0;
+
+      results.push({
+        friendInfo,
+        youOwe,
+        owesYou,
+        net: owesYou - youOwe, // positive → they owe you
+      });
+    }
+
+    return {
+      total: totalCount,
+      data: results,
+    };
   }
-
-  return {
-    total: totalCount,
-    data: results,
-  };
-}
-
 
   async pendingRequests(userId: number) {
     return this.friendshipRepo.find({
