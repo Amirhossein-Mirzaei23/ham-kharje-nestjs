@@ -91,8 +91,8 @@ export class GroupsService {
       relations: ['owner'],
     });
     if (!group) throw new NotFoundException('Group not found');
-    if (!group.owner?.id || group.owner.id !== ownerId)
-      throw new ForbiddenException('Only owner can add friends');
+    // if (!group.owner?.id || group.owner.id !== ownerId)
+    //   throw new ForbiddenException('Only owner can add friends');
 
     // Find all users
     const friends = await this.userRepo.findByIds(friendIds);
