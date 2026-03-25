@@ -14,7 +14,6 @@ import {
   UpdateFriendDto,
 } from './dto/update-friend.dto';
 import { Bill } from '../bills-management/entities/bill.entity';
-import { log } from 'util';
 import { UsersService } from '../users/users.service';
 
 @Injectable()
@@ -104,7 +103,6 @@ export class FriendshipService {
     // Get all friendships
     const [friendships, totalCount] = await this.friendshipRepo.findAndCount({
       where: [
-        // { user: { id: userId }, isAccepted: true },
         { friend: { id: userId }, isAccepted: true },
       ],
       skip: (page - 1) * 100,
@@ -119,28 +117,43 @@ export class FriendshipService {
     // ------- Debt Calculation For Each Friend -------
     const results: Array<any> = [];
 
-    for (const friendInfo of friends) {
-      const friendId = friendInfo.id;
+for (const friendInfo of friends) {
+  const friendId = friendInfo.id;
 
-      const debtRows = await this.billRepo
-        .createQueryBuilder('bill')
-        .select([
-          `SUM(CASE WHEN bill.creditorId = :friendId AND bill.debtorId = :userId THEN bill.amount - bill.paid ELSE 0 END) AS youOwe`,
-          `SUM(CASE WHEN bill.creditorId = :userId AND bill.debtorId = :friendId THEN bill.amount - bill.paid ELSE 0 END) AS owesYou`,
-        ])
-        .setParameters({ userId, friendId })
-        .getRawOne();
+  // one SELECT query per friend
+const bills = await this.billRepo.find({
+      where: [{ debtor: { id: userId } }, { creditor: { id: userId } }],
+      relations: ['creditor', 'debtor'],
+    });
 
-      const youOwe = parseFloat(debtRows.youOwe) || 0;
-      const owesYou = parseFloat(debtRows.owesYou) || 0;
+    
+
+  const unpaidOwesYou = bills.filter(
+    (bill) =>
+      bill.creditor?.id == userId &&
+      bill.debtor?.id == friendId && !bill.isPaid
+  );
+
+  const unpaidYouOwe = bills.filter(
+    (bill) =>
+      bill.creditor?.id === friendId && bill.debtor?.id == userId && !bill.isPaid
+  );
+
+  
+
+const totalOwseYou = unpaidOwesYou.reduce((sum, b) => sum + (b.amount - b.paid), 0);
+const totalYouOwe = unpaidYouOwe.reduce((sum, b) => sum + (b.amount - b.paid), 0);
 
       results.push({
         friendInfo,
-        youOwe,
-        owesYou,
-        net: owesYou - youOwe, // positive → they owe you
+        totalOwseYou,
+        totalYouOwe,        
+        net: Math.abs(totalOwseYou - totalYouOwe)
       });
-    }
+
+}
+
+
 
     return {
       total: totalCount,

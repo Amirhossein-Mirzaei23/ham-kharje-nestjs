@@ -20,6 +20,9 @@ export class WalletRepositoryImpl implements WalletRepository {
       where: { userId },
     });
   }
+  async findAll(): Promise<any> {
+      return this.repo.find();
+  }
 
   async findByIdForUpdate(walletId: number): Promise<Wallet> {
     return this.repo

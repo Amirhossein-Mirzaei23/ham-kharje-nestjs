@@ -90,13 +90,13 @@ export class PushController {
 
     if (!sent) {
       throw new BadRequestException(
-        'ارسال نوتیفیکیشن ناموفق بود',
+        'ارسال نوتیفیکیشن درخواست پرداخت ناموفق بود',
       );
     }
 
     return {
       success: true,
-      message: 'نوتیفیکیشن با موفقیت ارسال شد',
+      message: 'نوتیفیکیشن درخواست پرداخت با موفقیت ارسال شد',
     };
   }
 }

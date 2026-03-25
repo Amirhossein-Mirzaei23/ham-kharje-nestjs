@@ -44,6 +44,96 @@ $ npm run start:dev
 $ npm run start:prod
 ```
 
+## Wallet transaction APIs
+
+### `POST /wallet/transactions`
+
+Create a transaction record manually.
+
+Request body for wallet charge:
+
+```json
+{
+  "walletId": 1,
+  "paidByUserId": 7,
+  "amount": 50000,
+  "type": "CHARGE_WALLET",
+  "gateway": "ZARINPAL",
+  "referenceId": "manual-charge-001"
+}
+```
+
+Request body for paying another user's bill:
+
+```json
+{
+  "walletId": 1,
+  "paidByUserId": 7,
+  "paidToUserId": 12,
+  "billId": 18,
+  "amount": 320000,
+  "type": "PAY_BILLS",
+  "meta": {
+    "billTitle": "Electricity May",
+    "description": "Payment for another user"
+  }
+}
+```
+
+Request body for internet charge:
+
+```json
+{
+  "walletId": 1,
+  "paidByUserId": 7,
+  "amount": 89000,
+  "type": "CHARGE_INTERNET",
+  "meta": {
+    "packageName": "30GB / 30 Days",
+    "operator": "MCI"
+  }
+}
+```
+
+### `PATCH /bills/:id/pay`
+
+Pay a bill and create a wallet transaction automatically.
+
+Request body:
+
+```json
+{
+  "amount": 320000,
+  "payerUserId": 7
+}
+```
+
+### `GET /wallet/transactions/user/:userId`
+
+No request body. Returns transaction history for one user.
+
+### `GET /wallet/transactions/:id`
+
+No request body. Returns one transaction with related bill and user data.
+
+### `GET /wallet/history/:id`
+
+No request body. Shortcut endpoint for the same user history.
+
+## Database migration
+
+If your database is out of sync, run the migration in `src/migrations/1750284000000-AddWalletTransactionHistory.ts`.
+
+This migration:
+
+- adds `paidByUserId`, `paidToUserId`, and `billId` to `wallet_transactions`
+- converts old transaction type `DEPOSIT` to `CHARGE_WALLET`
+- makes `walletId`, `gateway`, and `referenceId` nullable
+- adds foreign keys to `wallets`, `user`, and `bill`
+- backfills `paidByUserId` from the existing wallet owner
+
+If you are using raw SQL manually, the migration file is safe to use as the source of truth for PostgreSQL.
+
 ## Run tests
 
 ```bash

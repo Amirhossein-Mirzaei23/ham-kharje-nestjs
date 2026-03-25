@@ -1,4 +1,11 @@
-import { Column, Entity, PrimaryGeneratedColumn, VersionColumn } from "typeorm";
+import {
+  Column,
+  Entity,
+  OneToMany,
+  PrimaryGeneratedColumn,
+  VersionColumn,
+} from 'typeorm';
+import { WalletTransaction } from './wallet-transaction.entity';
 
 @Entity('wallets')
 export class Wallet {
@@ -13,4 +20,7 @@ export class Wallet {
 
   @VersionColumn()
   version: number;
+
+  @OneToMany(() => WalletTransaction, (transaction) => transaction.wallet)
+  transactions: WalletTransaction[];
 }

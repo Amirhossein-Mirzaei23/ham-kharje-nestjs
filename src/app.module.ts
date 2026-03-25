@@ -13,6 +13,7 @@ import { UploadModule } from './modules/upload/upload.module';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { join } from 'path';
 import { PushModule } from './push/push.module';
+import { WalletModule } from './modules/wallet/wallet.module';
 
 @Module({
   imports: [
@@ -34,7 +35,7 @@ import { PushModule } from './push/push.module';
         password: config.get<string>('DATABASE_PASSWORD', 'postgres'),
         database: config.get<string>('DATABASE_NAME', 'mydb'),
         entities: [__dirname + '/**/*.entity{.ts,.js}'],
-        synchronize: config.get<string>('NODE_ENV') !== 'production', // Only sync in dev
+        synchronize: true, // Only sync in dev
       }),
     }),
 
@@ -52,6 +53,7 @@ import { PushModule } from './push/push.module';
     GroupsModule,
     PushModule,
     UploadModule,
+    WalletModule
   ],
   controllers: [AppController],
   providers: [AppService],

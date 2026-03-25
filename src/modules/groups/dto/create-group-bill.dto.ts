@@ -1,6 +1,6 @@
 import { IsNumber, IsOptional, IsBoolean, IsString } from 'class-validator';
 
-export class CreateBillDto {
+export class CreateGroupBillDto {
   @IsNumber()
   creditorId: number;
 
@@ -8,7 +8,7 @@ export class CreateBillDto {
   title:string
 
   @IsNumber()
-  debtorId?: number;
+  debtorIds: number[];
 
   @IsOptional()
   @IsNumber()
@@ -34,6 +34,6 @@ export class CreateBillDto {
   
   @IsOptional()
   @IsNumber()
-  totalAmount?:number
+  totalAmount
 
 }

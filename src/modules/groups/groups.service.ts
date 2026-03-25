@@ -17,7 +17,7 @@ import { UpdateGroupDto } from './dto/update-group.dto';
 import { CreateBillDto } from '../bills-management/dto/bills.dto';
 import { BillService } from '../bills-management/bills.service';
 import { v4 as uuidv4 } from 'uuid';
-
+import { CreateGroupBillDto } from './dto/create-group-bill.dto';
 
 @Injectable()
 export class GroupsService {
@@ -43,15 +43,14 @@ export class GroupsService {
       owner,
     });
 
-
-    const createdGroup  = await this.groupRepo.save(group);
-    const memberships:GroupMembership[] = []
-      memberships.push(
-          this.groupMembershipRepo.create({ group:createdGroup, user: owner }),
-        );
+    const createdGroup = await this.groupRepo.save(group);
+    const memberships: GroupMembership[] = [];
+    memberships.push(
+      this.groupMembershipRepo.create({ group: createdGroup, user: owner }),
+    );
     await this.groupMembershipRepo.save(memberships);
 
-    return createdGroup
+    return createdGroup;
   }
 
   async update(groupId: number, dto: UpdateGroupDto) {
@@ -180,7 +179,7 @@ export class GroupsService {
     return { ok: true, bill };
   }
 
-  async createBillForGroupMembers(groupId: number, dto: CreateBillDto) {
+  async createBillForGroupMembers(groupId: number, payload: CreateGroupBillDto) {
     let errors: Array<any> = [];
     const group = await this.groupRepo.findOne({
       where: { id: groupId },
@@ -193,33 +192,34 @@ export class GroupsService {
 
     if (!group) throw new NotFoundException('Group not found');
     if (!groupMembers.length) throw new NotFoundException('members not found');
+    if (!payload.debtorIds.length) throw new NotFoundException('debtorIds not found');
 
     try {
-let creditorBill
-const batchReferenceId = uuidv4(); 
+      let creditorBill;
+      const batchReferenceId = uuidv4();
       await Promise.all(
-        groupMembers.map(async (member) => {
-          const payload: CreateBillDto = {
-            creditorId: dto.creditorId,
-            debtorId: member.user.id,
-            title: dto.title,
-            amount:  dto.amount / groupMembers.length,
+        payload.debtorIds.map(async (debtorId) => {
+          const billpayload: CreateBillDto = {
+            creditorId: payload.creditorId,
+            debtorId: debtorId,
+            title: payload.title,
+            amount: payload.amount / payload.debtorIds.length,
             groupId: group.id,
-            referenceId: batchReferenceId, 
-            totalAmount:dto.amount
+            referenceId: batchReferenceId,
+            totalAmount: payload.amount,
           };
-          if (dto.creditorId === member.user.id) {
-             payload.paid = payload.amount
-             payload.isPaid = true
+          if (payload.creditorId === debtorId) {
+            billpayload.paid = payload.amount / payload.debtorIds.length,
+            billpayload.isPaid = true;
           }
-        const bill =  await this.billService.createBill(payload);
 
+          const bill = await this.billService.createBill(billpayload);
         }),
       );
     } catch (err) {
       errors.push(err);
     }
-    
+
     return {
       data: { group: group, members: groupMembers },
       errors,
@@ -252,6 +252,9 @@ const batchReferenceId = uuidv4();
     });
 
     const allGroups = [...allGroupsMap.values()];
+allGroups.sort((a, b) => {
+  return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+});
 
     // 4) pagination
     const paginated = allGroups.slice(skip, skip + limit);
@@ -297,18 +300,18 @@ const batchReferenceId = uuidv4();
       relations: ['user'],
     });
 
-
     if (!group) throw new NotFoundException('Group not found');
-    
+
     const data = {
       group: {
-      id: group.id,
-      name: group.name,
-      owner: group.owner,
-    },
-    bills: group.bills,
-    pendingBills: group.bills.filter((b) => !b.isPaid),
-    members:memberships,
+        id: group.id,
+        name: group.name,
+        owner: group.owner,
+        image: group.image || null,
+      },
+      bills: group.bills,
+      pendingBills: group.bills.filter((b) => !b.isPaid),
+      members: memberships,
     };
     return data;
   }

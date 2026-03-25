@@ -1,6 +1,15 @@
-import { Body, Controller, Get, Param, ParseIntPipe, Patch, Post } from "@nestjs/common";
-import { BillService } from "./bills.service";
-import { CreateBillDto } from "./dto/bills.dto";
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseIntPipe,
+  Patch,
+  Post,
+} from '@nestjs/common';
+import { BillService } from './bills.service';
+import { CreateBillDto } from './dto/bills.dto';
+import { PayBillDto } from '../wallet/application/dto/pay-bill.dto';
 
 @Controller('bills')
 export class BillController {
@@ -12,12 +21,12 @@ export class BillController {
   }
 
   @Patch(':id/pay')
-  payBill(@Param('id',ParseIntPipe) id: number, @Body('amount') amount: number) {
-    return this.billService.payBill(id, amount);
+  payBill(@Param('id', ParseIntPipe) id: number, @Body() dto: PayBillDto) {
+    return this.billService.payBill(id, dto.amount, dto.payerUserId);
   }
 
   @Get('user/:id')
-  listUserDebts(@Param('id',ParseIntPipe) userId: number) {
+  listUserDebts(@Param('id', ParseIntPipe) userId: number) {
     return this.billService.listUserDebts(userId);
   }
 }

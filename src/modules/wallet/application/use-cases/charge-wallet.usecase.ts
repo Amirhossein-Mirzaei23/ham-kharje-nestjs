@@ -1,9 +1,9 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
-import { TransactionType } from "../../domain/enums/transaction-type.enum";
-import { TransactionStatus } from "../../domain/enums/transaction-status.enum";
-import { PaymentFactory } from "../../infrastructure/payment/payment.factory";
-import { TransactionRepository } from "../../domain/repositories/transaction.repository";
-import { WalletRepository } from "../../domain/repositories/wallet.repository";
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { TransactionType } from '../../domain/enums/transaction-type.enum';
+import { TransactionStatus } from '../../domain/enums/transaction-status.enum';
+import { PaymentFactory } from '../../infrastructure/payment/payment.factory';
+import { TransactionRepository } from '../../domain/repositories/transaction.repository';
+import { WalletRepository } from '../../domain/repositories/wallet.repository';
 
 @Injectable()
 export class ChargeWalletUseCase {
@@ -16,13 +16,16 @@ export class ChargeWalletUseCase {
   async execute(userId: number, amount: number, gateway: string) {
     const wallet = await this.walletRepo.findByUserId(userId);
     if (!wallet) {
-        throw new NotFoundException('کیف پول یاقت نشد')
+      throw new NotFoundException('کیف پول یاقت نشد');
     }
     const tx = await this.txRepo.create({
       walletId: wallet.id,
+      paidByUserId: userId,
+      paidToUserId: null,
+      billId: null,
       amount,
       gateway,
-      type: TransactionType.DEPOSIT,
+      type: TransactionType.CHARGE_WALLET,
       status: TransactionStatus.PENDING,
     });
 

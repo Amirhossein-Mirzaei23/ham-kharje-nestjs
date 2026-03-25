@@ -1,4 +1,5 @@
 export enum TransactionType {
-  DEPOSIT = 'DEPOSIT',
+  CHARGE_WALLET = 'CHARGE_WALLET',
+  PAY_BILLS = 'PAY_BILLS',
+  CHARGE_INTERNET = 'CHARGE_INTERNET',
 }
-

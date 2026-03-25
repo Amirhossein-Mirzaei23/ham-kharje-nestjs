@@ -16,6 +16,7 @@ import { UpdateGroupDto } from './dto/update-group.dto';
 import { AddFriendToGroupDto } from './dto/add-friend-to-group.dto';
 import { AssignBillDto } from './dto/assign-bill.dto';
 import { CreateBillDto } from '../bills-management/dto/bills.dto';
+import { CreateGroupBillDto } from './dto/create-group-bill.dto';
 
 @Controller('groups')
 export class GroupsController {
@@ -76,7 +77,7 @@ export class GroupsController {
   @Post(':id/create-bill')
   createBillForGroupMembers(
     @Param('id', ParseIntPipe) id: number,
-    @Body() dto: CreateBillDto,
+    @Body() dto: CreateGroupBillDto,
   ) {
     return this.groupsService.createBillForGroupMembers(id, dto);
   }

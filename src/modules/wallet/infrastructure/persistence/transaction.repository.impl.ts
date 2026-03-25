@@ -1,9 +1,9 @@
-import { Injectable } from "@nestjs/common";
-import { InjectRepository } from "@nestjs/typeorm";
-import { WalletTransaction } from "src/modules/wallet/domain/entities/wallet-transaction.entity";
-import { TransactionStatus } from "src/modules/wallet/domain/enums/transaction-status.enum";
-import { TransactionRepository } from "src/modules/wallet/domain/repositories/transaction.repository";
-import { Repository } from "typeorm";
+import { Injectable } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { WalletTransaction } from 'src/modules/wallet/domain/entities/wallet-transaction.entity';
+import { TransactionStatus } from 'src/modules/wallet/domain/enums/transaction-status.enum';
+import { TransactionRepository } from 'src/modules/wallet/domain/repositories/transaction.repository';
+import { Repository } from 'typeorm';
 
 // infrastructure/persistence/transaction.repository.impl.ts
 @Injectable()
@@ -27,6 +27,21 @@ export class TransactionRepositoryImpl implements TransactionRepository {
         referenceId,
         status: TransactionStatus.PENDING,
       },
+    });
+  }
+
+  async findById(txId: string) {
+    return this.repo.findOne({
+      where: { id: txId },
+      relations: ['wallet', 'paidByUser', 'paidToUser', 'bill'],
+    });
+  }
+
+  async findUserHistory(userId: number) {
+    return this.repo.find({
+      where: [{ paidByUserId: userId }, { paidToUserId: userId }],
+      relations: ['wallet', 'paidByUser', 'paidToUser', 'bill'],
+      order: { createdAt: 'DESC' },
     });
   }
 

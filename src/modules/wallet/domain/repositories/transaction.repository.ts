@@ -1,4 +1,4 @@
-import { WalletTransaction } from "../entities/wallet-transaction.entity";
+import { WalletTransaction } from '../entities/wallet-transaction.entity';
 
 // domain/repositories/transaction.repository.ts
 export abstract class TransactionRepository {
@@ -7,6 +7,8 @@ export abstract class TransactionRepository {
   abstract findPendingByReference(
     referenceId: string,
   ): Promise<WalletTransaction | null>;
+  abstract findById(txId: string): Promise<WalletTransaction | null>;
+  abstract findUserHistory(userId: number): Promise<WalletTransaction[]>;
   abstract success(txId: string, meta?: any): Promise<void>;
   abstract fail(txId: string): Promise<void>;
 }

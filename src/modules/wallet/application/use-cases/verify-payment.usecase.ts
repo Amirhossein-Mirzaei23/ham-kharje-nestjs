@@ -1,10 +1,10 @@
-import { DataSource } from "typeorm";
-import { TransactionRepository } from "../../domain/repositories/transaction.repository";
-import { PaymentFactory } from "../../infrastructure/payment/payment.factory";
-import { Injectable } from "@nestjs/common";
-import { TransactionStatus } from "../../domain/enums/transaction-status.enum";
-import { Wallet } from "../../domain/entities/wallet.entity";
-import { WalletTransaction } from "../../domain/entities/wallet-transaction.entity";
+import { DataSource } from 'typeorm';
+import { TransactionRepository } from '../../domain/repositories/transaction.repository';
+import { PaymentFactory } from '../../infrastructure/payment/payment.factory';
+import { Injectable } from '@nestjs/common';
+import { TransactionStatus } from '../../domain/enums/transaction-status.enum';
+import { Wallet } from '../../domain/entities/wallet.entity';
+import { WalletTransaction } from '../../domain/entities/wallet-transaction.entity';
 
 @Injectable()
 export class VerifyPaymentUseCase {
@@ -22,6 +22,11 @@ export class VerifyPaymentUseCase {
     if (!tx) return;
 
     if (status !== 'OK') {
+      await this.txRepo.fail(tx.id);
+      return;
+    }
+
+    if (!tx.gateway) {
       await this.txRepo.fail(tx.id);
       return;
     }

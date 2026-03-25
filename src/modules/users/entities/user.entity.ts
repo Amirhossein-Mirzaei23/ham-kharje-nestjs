@@ -70,4 +70,11 @@ debtorBills: Bill[];
 })
 subscription: PushSubscriptionDto | null;
 
+@Length(24, 26)
+@Column({ nullable: true, unique: true })
+shebaNumber: string;
+
+@Length(16, 19)
+@Column({ nullable: true, unique: true })
+cardNumber: string;
 }
