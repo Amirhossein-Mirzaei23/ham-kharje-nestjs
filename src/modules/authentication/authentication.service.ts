@@ -8,10 +8,12 @@ import { LoginDto } from './dto/login.dto';
 import { JwtService } from '@nestjs/jwt';
 import { User } from '../users/entities/user.entity';
 import { UsersService } from '../users/users.service';
+import { WalletRepositoryImpl } from '../wallet/infrastructure/persistence/wallet.repository.impl';
 @Injectable()
 export class AuthenticationService {
   constructor(
     private readonly usersService: UsersService,
+    private walletRepo: WalletRepositoryImpl,
     private readonly jwtService: JwtService
   ) {}
 
@@ -35,6 +37,7 @@ export class AuthenticationService {
       phone: userData.phone
     });
     this.jwtService.decode
+    await this.walletRepo.createForUser(userData.id);
     return { data: {userData ,token:token},message: 'Registered successflly' };
   }
 

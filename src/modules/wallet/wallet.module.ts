@@ -36,6 +36,6 @@ import { IdpayService } from './infrastructure/payment/idpay.service';
     ZarinpalService,
     IdpayService,
   ],
-  exports: [WalletTransactionService],
+  exports: [WalletTransactionService, WalletRepositoryImpl],
 })
 export class WalletModule {}
