@@ -11,6 +11,7 @@ import { Repository } from 'typeorm';
 import { CreateBillDto } from './dto/bills.dto';
 import { GroupMembership } from '../friendship/entities/groupMembership.entity';
 import { WalletTransactionService } from '../wallet/application/services/wallet-transaction.service';
+import { TransactionType } from '../wallet/domain/enums/transaction-type.enum';
 
 @Injectable()
 export class BillService {
@@ -120,10 +121,12 @@ export class BillService {
     if (bill.paid >= bill.amount) bill.isPaid = true;
 
     const updatedBill = await this.billRepo.save(bill);
+
     const transaction = await this.walletTransactionService.recordBillPayment(
       billId,
       amount,
       payerUserId,
+      TransactionType.PAY_BILLS
     );
 
     return {
@@ -137,5 +140,16 @@ export class BillService {
       where: [{ debtor: { id: userId } }, { creditor: { id: userId } }],
       relations: ['creditor', 'debtor', 'group'],
     });
+  }
+
+  async deleteBill(referenceId:string) {
+    const result = await this.billRepo.delete({referenceId:referenceId});
+    if (!result.affected) {
+      throw new NotFoundException('Bill not found');
+    }
+
+    return {
+      message: 'Bill deleted successfully',
+    };
   }
 }

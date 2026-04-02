@@ -16,7 +16,6 @@ async function bootstrap() {
     res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
   },
   });
-  // process.env.SERVER_URL = 'https://dong-api.liara.run';
-  await app.listen(process.env.PORT ?? 4000);
+  await app.listen(process.env.PORT ?? 3000, '0.0.0.0');
 }
 bootstrap();

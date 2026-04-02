@@ -179,7 +179,10 @@ export class GroupsService {
     return { ok: true, bill };
   }
 
-  async createBillForGroupMembers(groupId: number, payload: CreateGroupBillDto) {
+  async createBillForGroupMembers(
+    groupId: number,
+    payload: CreateGroupBillDto,
+  ) {
     let errors: Array<any> = [];
     const group = await this.groupRepo.findOne({
       where: { id: groupId },
@@ -192,7 +195,8 @@ export class GroupsService {
 
     if (!group) throw new NotFoundException('Group not found');
     if (!groupMembers.length) throw new NotFoundException('members not found');
-    if (!payload.debtorIds.length) throw new NotFoundException('debtorIds not found');
+    if (!payload.debtorIds.length)
+      throw new NotFoundException('debtorIds not found');
 
     try {
       let creditorBill;
@@ -209,8 +213,8 @@ export class GroupsService {
             totalAmount: payload.amount,
           };
           if (payload.creditorId === debtorId) {
-            billpayload.paid = payload.amount / payload.debtorIds.length,
-            billpayload.isPaid = true;
+            ((billpayload.paid = payload.amount / payload.debtorIds.length),
+              (billpayload.isPaid = true));
           }
 
           const bill = await this.billService.createBill(billpayload);
@@ -252,9 +256,9 @@ export class GroupsService {
     });
 
     const allGroups = [...allGroupsMap.values()];
-allGroups.sort((a, b) => {
-  return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-});
+    allGroups.sort((a, b) => {
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
 
     // 4) pagination
     const paginated = allGroups.slice(skip, skip + limit);
@@ -301,7 +305,12 @@ allGroups.sort((a, b) => {
     });
 
     if (!group) throw new NotFoundException('Group not found');
-
+    console.log('bills old',group.bills[0]);
+    group.bills = group.bills.sort((a, b) => {
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
+    console.log('bills',group.bills[0]);
+    
     const data = {
       group: {
         id: group.id,

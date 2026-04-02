@@ -38,8 +38,6 @@ export class WalletController {
     if (isNaN(userId)) {
       throw new BadRequestException('400 - user id is not valid');
     }
-    console.log('userid',userId);
-    
     return this.walletRepo.findByUserId(userId);
   }
 

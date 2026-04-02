@@ -79,6 +79,7 @@ export class WalletTransactionService {
     billId: number,
     amount: number,
     payerUserId: number,
+    type:TransactionType
   ): Promise<WalletTransaction> {
     const bill = await this.billRepository.findOne({
       where: { id: billId },
@@ -103,7 +104,7 @@ export class WalletTransactionService {
       paidToUserId: bill.creditor.id,
       billId: bill.id,
       amount,
-      type: bill.id ? TransactionType.PAY_BILLS: TransactionType.CHARGE_WALLET ,
+      type: type,
       meta: {
         billTitle: bill.title,
         debtorId: bill.debtor.id,
@@ -120,9 +121,7 @@ export class WalletTransactionService {
     }
 
     if (dto.billId) {
-      return dto.paidByUserId === dto.paidToUserId
-        ? TransactionType.CHARGE_WALLET
-        : TransactionType.PAY_BILLS;
+      return TransactionType.PAY_BILLS;
     }
 
     return TransactionType.CHARGE_WALLET;

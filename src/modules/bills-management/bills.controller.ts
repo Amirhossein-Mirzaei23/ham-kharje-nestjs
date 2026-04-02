@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   ParseIntPipe,
@@ -28,5 +29,10 @@ export class BillController {
   @Get('user/:id')
   listUserDebts(@Param('id', ParseIntPipe) userId: number) {
     return this.billService.listUserDebts(userId);
+  }
+
+  @Delete(':id')
+  deleteBill(@Param('id') id: string) {
+    return this.billService.deleteBill(id);
   }
 }
