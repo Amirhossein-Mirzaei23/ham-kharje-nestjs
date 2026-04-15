@@ -11,7 +11,6 @@ import { CreateFriendDto } from './dto/create-friend.dto';
 import {
   AcceptFriendRequestDto,
   SendFriendRequestDto,
-  UpdateFriendDto,
 } from './dto/update-friend.dto';
 import { Bill } from '../bills-management/entities/bill.entity';
 import { UsersService } from '../users/users.service';

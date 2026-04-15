@@ -4,7 +4,7 @@ WORKDIR /app
 
 COPY package*.json ./
 
-RUN npm config set registry https://mirror-npm.runflare.com
+RUN npm set registry https://mirror-npm.runflare.com
 
 RUN npm i --verbose
 

@@ -15,6 +15,9 @@ import { join } from 'path';
 import { PushModule } from './push/push.module';
 import { WalletModule } from './modules/wallet/wallet.module';
 
+import { APP_GUARD } from '@nestjs/core';
+import { JwtAuthGuard } from './modules/authentication/jwt-auth.guard';
+
 @Module({
   imports: [
     // ConfigModule for .env support
@@ -56,7 +59,13 @@ import { WalletModule } from './modules/wallet/wallet.module';
     WalletModule
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService,
+    {
+      provide: APP_GUARD,
+      useClass: JwtAuthGuard,
+    },
+  ],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {

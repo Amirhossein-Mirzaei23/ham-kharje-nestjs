@@ -9,6 +9,7 @@ import {
   Get,
   Query,
   ParseIntPipe,
+  Req,
 } from '@nestjs/common';
 import { GroupsService } from './groups.service';
 import { CreateGroupDto } from './dto/create-group.dto';
@@ -17,6 +18,7 @@ import { AddFriendToGroupDto } from './dto/add-friend-to-group.dto';
 import { AssignBillDto } from './dto/assign-bill.dto';
 import { CreateBillDto } from '../bills-management/dto/bills.dto';
 import { CreateGroupBillDto } from './dto/create-group-bill.dto';
+import { AddMemberByLinkDto } from './dto/add-member-to-group.dto';
 
 @Controller('groups')
 export class GroupsController {
@@ -71,8 +73,10 @@ export class GroupsController {
   ) {
     return this.groupsService.assignBillToGroup(id, dto);
   }
-
-
+  @Post('/add-member-by-link')
+  addGroupMemberByLink(@Body() dto: AddMemberByLinkDto) {
+   return this.groupsService.addGroupMemberByLink(dto);
+  }
 
   @Post(':id/create-bill')
   createBillForGroupMembers(
@@ -82,10 +86,10 @@ export class GroupsController {
     return this.groupsService.createBillForGroupMembers(id, dto);
   }
 
-
   @Post('list')
   listUserGroups(
     @Body() body: { userId: number; page: number; limit: number },
+    @Req() req: Request,
   ) {
     return this.groupsService.listUserGroups(
       body.userId,

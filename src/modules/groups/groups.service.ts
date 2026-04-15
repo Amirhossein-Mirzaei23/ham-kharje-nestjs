@@ -18,6 +18,7 @@ import { CreateBillDto } from '../bills-management/dto/bills.dto';
 import { BillService } from '../bills-management/bills.service';
 import { v4 as uuidv4 } from 'uuid';
 import { CreateGroupBillDto } from './dto/create-group-bill.dto';
+import { AddMemberByLinkDto } from './dto/add-member-to-group.dto';
 
 @Injectable()
 export class GroupsService {
@@ -130,7 +131,110 @@ export class GroupsService {
       memberships,
     };
   }
+  async addGroupMemberByLink(payload: AddMemberByLinkDto) {
+    const { groupId, hostUserId, newMemberUserId } = payload;
 
+    if (hostUserId === newMemberUserId) {
+      throw new BadRequestException('Host user and new member must be different');
+    }
+
+    return this.groupRepo.manager.transaction(async (manager) => {
+      const groupRepo = manager.getRepository(Group);
+      const userRepo = manager.getRepository(User);
+      const friendshipRepo = manager.getRepository(Friendship);
+      const groupMembershipRepo = manager.getRepository(GroupMembership);
+
+      const group = await groupRepo.findOne({
+        where: { id: groupId },
+        relations: ['owner'],
+      });
+      if (!group) throw new NotFoundException('Group not found');
+
+      const hostUser = await userRepo.findOne({ where: { id: hostUserId } });
+      if (!hostUser) throw new NotFoundException('Host user not found');
+
+      const newMemberUser = await userRepo.findOne({
+        where: { id: newMemberUserId },
+      });
+      if (!newMemberUser) throw new NotFoundException('New member user not found');
+
+      const hostMembership = await groupMembershipRepo.findOne({
+        where: { group: { id: groupId }, user: { id: hostUserId } },
+        relations: ['group', 'user'],
+      });
+      const isHostInGroup =
+        group.owner?.id === hostUserId || Boolean(hostMembership);
+
+      if (!isHostInGroup) {
+        throw new ForbiddenException('Host user is not a member of this group');
+      }
+
+      const existingMembership = await groupMembershipRepo.findOne({
+        where: { group: { id: groupId }, user: { id: newMemberUserId } },
+      });
+
+      if (!existingMembership) {
+        await groupMembershipRepo.save(
+          groupMembershipRepo.create({ group, user: newMemberUser }),
+        );
+      }
+
+      const hostFriendIds = Array.isArray(hostUser.friends) ? hostUser.friends : [];
+      if (!hostFriendIds.includes(newMemberUserId)) {
+        hostUser.friends = [...hostFriendIds, newMemberUserId];
+        await userRepo.save(hostUser);
+      }
+
+      const newMemberFriendIds = Array.isArray(newMemberUser.friends)
+        ? newMemberUser.friends
+        : [];
+      if (!newMemberFriendIds.includes(hostUserId)) {
+        newMemberUser.friends = [...newMemberFriendIds, hostUserId];
+        await userRepo.save(newMemberUser);
+      }
+
+      const directFriendship = await friendshipRepo.findOne({
+        where: { user: { id: hostUserId }, friend: { id: newMemberUserId } },
+      });
+      if (!directFriendship) {
+        await friendshipRepo.save(
+          friendshipRepo.create({
+            user: hostUser,
+            friend: newMemberUser,
+            isAccepted: true,
+          }),
+        );
+      } else if (!directFriendship.isAccepted) {
+        directFriendship.isAccepted = true;
+        await friendshipRepo.save(directFriendship);
+      }
+
+      const reverseFriendship = await friendshipRepo.findOne({
+        where: { user: { id: newMemberUserId }, friend: { id: hostUserId } },
+      });
+      if (!reverseFriendship) {
+        await friendshipRepo.save(
+          friendshipRepo.create({
+            user: newMemberUser,
+            friend: hostUser,
+            isAccepted: true,
+          }),
+        );
+      } else if (!reverseFriendship.isAccepted) {
+        reverseFriendship.isAccepted = true;
+        await friendshipRepo.save(reverseFriendship);
+      }
+
+      return {
+        ok: true,
+        message: 'User added to group successfully by link',
+        groupId,
+        hostUserId,
+        newMemberUserId,
+        alreadyMember: Boolean(existingMembership),
+      };
+    });
+  }
   async removeFriendFromGroup(
     groupId: number,
     ownerId: number,

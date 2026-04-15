@@ -50,6 +50,12 @@ export class UsersController {
     return this.usersService.update(+id, updateUserDto);
   }
 
+  @Put(':id/password')
+  updatePassword(@Param('id') id: string, @Body() updatPasswordDto: { oldPassword: string; newPassword: string }): Promise<{ message: string }> {
+    return this.usersService.updatePassword(+id, updatPasswordDto);
+  }
+  
+
   @Delete(':id')
   remove(@Param('id') id: string): Promise<void> {
     return this.usersService.remove(+id);

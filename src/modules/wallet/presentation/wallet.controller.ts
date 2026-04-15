@@ -1,83 +1,70 @@
 import {
-  BadRequestException,
   Body,
   Controller,
   Get,
   Param,
+  ParseIntPipe,
   Post,
   Query,
-  Req,
+  UseGuards,
 } from '@nestjs/common';
-import { ChargeWalletUseCase } from '../application/use-cases/charge-wallet.usecase';
-import { VerifyPaymentUseCase } from '../application/use-cases/verify-payment.usecase';
-import { WalletRepositoryImpl } from '../infrastructure/persistence/wallet.repository.impl';
-import { WalletTransactionService } from '../application/services/wallet-transaction.service';
+import { GetUserId } from 'src/modules/authentication/get-user.decorator';
+import { JwtAuthGuard } from 'src/modules/authentication/jwt-auth.guard';
+import { ChargeWalletDto } from '../dto/charge-wallet.dto';
+import { TransferWalletDto } from '../dto/transfer-wallet.dto';
+import { VandarPaymentCallbackDto } from '../dto/vandar-payment-callback.dto';
+import { WithdrawWalletDto } from '../dto/withdraw-wallet.dto';
+import { WalletService } from '../wallet.service';
 
 @Controller('wallet')
 export class WalletController {
-  constructor(
-    private chargeWallet: ChargeWalletUseCase,
-    private verifyPayment: VerifyPaymentUseCase,
-    private walletRepo: WalletRepositoryImpl,
-    private readonly walletTransactionService: WalletTransactionService,
-  ) {}
+  constructor(private readonly walletService: WalletService) {}
 
+  @UseGuards(JwtAuthGuard)
   @Post('charge')
-  charge(@Req() req, @Body() dto) {
-    return this.chargeWallet.execute(req.user.id, dto.amount, dto.gateway);
+  chargeWallet(@GetUserId() userId: number, @Body() dto: ChargeWalletDto) {
+    return this.walletService.chargeWallet(userId, dto);
   }
 
-  @Get('payment/callback')
-  callback(@Query() q) {
-    return this.verifyPayment.execute(q.Authority, q.Status);
+  @Get('callback')
+  handleCallback(@Query() dto: VandarPaymentCallbackDto) {
+    return this.walletService.handlePaymentCallback(dto);
   }
 
-  @Get(':id')
-  findOne(@Param('id') id: string) {
-    const userId = Number(id);
-    if (isNaN(userId)) {
-      throw new BadRequestException('400 - user id is not valid');
-    }
-    return this.walletRepo.findByUserId(userId);
+  @UseGuards(JwtAuthGuard)
+  @Post('transfer')
+  transferWalletToWallet(
+    @GetUserId() userId: number,
+    @Body() dto: TransferWalletDto,
+  ) {
+    return this.walletService.transferWalletToWallet(userId, dto);
   }
 
-  @Post('create/:id')
-  async find(@Param('id') id: string) {
-    const userId = Number(id);
-    if (isNaN(userId)) {
-      throw new BadRequestException('400 - user id is not valid');
-    }
-    const wallet = await this.walletRepo.findByUserId(userId);
-
-    if (wallet && wallet.id) {
-      throw new BadRequestException('400 - this user has a wallet');
-    }
-    return this.walletRepo.createForUser(userId);
-  }
-  @Get()
-  findAll(): Promise<{ count: number; data }> {
-    let data: Array<any>;
-    let count;
-    return this.walletRepo
-      .findAll()
-      .then((res) => {
-        data = res;
-        count = data?.length;
-
-        return { count, data };
-      })
-      .catch((err) => {
-        return err as any;
-      });
+  @UseGuards(JwtAuthGuard)
+  @Post('withdraw')
+  withdrawToBank(@GetUserId() userId: number, @Body() dto: WithdrawWalletDto) {
+    return this.walletService.withdrawToBank(userId, dto);
   }
 
-  @Get('history/:id')
-  findHistory(@Param('id') id: string) {
-    const userId = Number(id);
-    if (isNaN(userId)) {
-      throw new BadRequestException('400 - user id is not valid');
-    }
+  @UseGuards(JwtAuthGuard)
+  @Get('me')
+  getMyWallet(@GetUserId() userId: number) {
+    return this.walletService.getWalletByUserId(userId);
+  }
 
-    return this.walletTransactionService.getUserHistory(userId);
+  @UseGuards(JwtAuthGuard)
+  @Get('me/history')
+  getMyWalletHistory(@GetUserId() userId: number) {
+    return this.walletService.getWalletHistory(userId);
+  }
+
+  @Get(':userId')
+  getWalletByUserId(@Param('userId', ParseIntPipe) userId: number) {
+    return this.walletService.getWalletByUserId(userId);
+  }
+
+  @Get(':userId/history')
+  getWalletHistoryByUserId(@Param('userId', ParseIntPipe) userId: number) {
+    return this.walletService.getWalletHistory(userId);
   }
 }
