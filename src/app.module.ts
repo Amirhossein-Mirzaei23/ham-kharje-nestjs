@@ -14,9 +14,11 @@ import { ServeStaticModule } from '@nestjs/serve-static';
 import { join } from 'path';
 import { PushModule } from './push/push.module';
 import { WalletModule } from './modules/wallet/wallet.module';
+import { InviteModule } from './modules/invite/invite.module';
 
 import { APP_GUARD } from '@nestjs/core';
 import { JwtAuthGuard } from './modules/authentication/jwt-auth.guard';
+import { JibitModule } from './modules/transfer-money/jibit/jibit.module';
 
 @Module({
   imports: [
@@ -56,7 +58,9 @@ import { JwtAuthGuard } from './modules/authentication/jwt-auth.guard';
     GroupsModule,
     PushModule,
     UploadModule,
-    WalletModule
+    WalletModule,
+    InviteModule,
+    JibitModule
   ],
   controllers: [AppController],
   providers: [

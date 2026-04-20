@@ -8,9 +8,11 @@ import {
   Patch,
   Post,
 } from '@nestjs/common';
+import { GetUserId } from '../authentication/get-user.decorator';
 import { BillService } from './bills.service';
 import { CreateBillDto } from './dto/bills.dto';
 import { PayBillDto } from '../wallet/application/dto/pay-bill.dto';
+import { DeleteBillDto } from '../wallet/application/dto/delete-bill.dto';
 
 @Controller('bills')
 export class BillController {
@@ -22,8 +24,12 @@ export class BillController {
   }
 
   @Patch(':id/pay')
-  payBill(@Param('id', ParseIntPipe) id: number, @Body() dto: PayBillDto) {
-    return this.billService.payBill(id, dto.amount, dto.payerUserId);
+  payBill(
+    @Param('id', ParseIntPipe) id: number,
+    @GetUserId() userId: number,
+    @Body() dto: PayBillDto,
+  ) {
+    return this.billService.payBill(id, userId, dto);
   }
 
   @Get('user/:id')
@@ -31,8 +37,8 @@ export class BillController {
     return this.billService.listUserDebts(userId);
   }
 
-  @Delete(':id')
-  deleteBill(@Param('id') id: string) {
-    return this.billService.deleteBill(id);
+  @Post('delete')
+  deleteBill(@Body() dto: DeleteBillDto,) {
+    return this.billService.deleteBill(dto);
   }
 }

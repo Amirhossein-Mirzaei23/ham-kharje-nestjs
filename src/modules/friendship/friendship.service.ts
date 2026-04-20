@@ -14,6 +14,7 @@ import {
 } from './dto/update-friend.dto';
 import { Bill } from '../bills-management/entities/bill.entity';
 import { UsersService } from '../users/users.service';
+import { AddFrinedByLinkDto } from './dto/add-freind-by-link.dto';
 
 @Injectable()
 export class FriendshipService {
@@ -151,9 +152,6 @@ const totalYouOwe = unpaidYouOwe.reduce((sum, b) => sum + (b.amount - b.paid), 0
       });
 
 }
-
-
-
     return {
       total: totalCount,
       data: results,
@@ -173,4 +171,77 @@ const totalYouOwe = unpaidYouOwe.reduce((sum, b) => sum + (b.amount - b.paid), 0
       relations: ['friend'],
     });
   }
+  async addFriendByLink(payload:AddFrinedByLinkDto){
+    const hostUserId = payload.hostUserId
+    const newFriendId = payload.newFriendId
+    const hostUser = await this.userRepo.findOne({ where: { id: hostUserId } });
+          if (!hostUser) throw new NotFoundException('Host user not found');
+        const friendship = await this.friendshipRepo.findOne({
+      where: [
+        { user: { id: hostUserId }, friend: { id: newFriendId } },
+        { user: { id: newFriendId }, friend: { id: hostUserId } },
+      ],
+    });
+    if (friendship) throw new NotFoundException('این کاربر در حال دوست شما میباشد');
+
+          const newMemberUser = await this.userRepo.findOne({
+            where: { id: newFriendId },
+          });
+          if (!newMemberUser) throw new NotFoundException('New member user not found');
+  
+          const hostFriendIds = Array.isArray(hostUser.friends) ? hostUser.friends : [];
+          if (!hostFriendIds.includes(newFriendId)) {
+            hostUser.friends = [...hostFriendIds, newFriendId];
+            await this.userRepo.save(hostUser);
+          }
+          const newMemberFriendIds = Array.isArray(newMemberUser.friends)
+            ? newMemberUser.friends
+            : [];
+          if (!newMemberFriendIds.includes(hostUserId)) {
+            newMemberUser.friends = [...newMemberFriendIds, hostUserId];
+            await this.userRepo.save(newMemberUser);
+          }
+    
+          const directFriendship = await this.friendshipRepo.findOne({
+            where: { user: { id: hostUserId }, friend: { id: newFriendId } },
+          });
+          if (!directFriendship) {
+            await this.friendshipRepo.save(
+              this.friendshipRepo.create({
+                user: hostUser,
+                friend: newMemberUser,
+                isAccepted: true,
+              }),
+            );
+          } else if (!directFriendship.isAccepted) {
+            directFriendship.isAccepted = true;
+            await this.friendshipRepo.save(directFriendship);
+          }
+    
+          const reverseFriendship = await this.friendshipRepo.findOne({
+            where: { user: { id: newFriendId }, friend: { id: hostUserId } },
+          });
+          if (!reverseFriendship) {
+            await this.friendshipRepo.save(
+              this.friendshipRepo.create({
+                user: newMemberUser,
+                friend: hostUser,
+                isAccepted: true,
+              }),
+            );
+          } else if (!reverseFriendship.isAccepted) {
+            reverseFriendship.isAccepted = true;
+            await this.friendshipRepo.save(reverseFriendship);
+          }
+    
+          return {
+            ok: true,
+            message: 'User added to group successfully by link',
+            hostUserId,
+            newFriendId,
+          };
+        
+  }
 }
+
+

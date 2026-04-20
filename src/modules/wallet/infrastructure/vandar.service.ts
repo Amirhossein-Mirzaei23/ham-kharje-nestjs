@@ -148,19 +148,28 @@ export class VandarService {
     const rawBody = await response.text();
 
     let body: T | { message?: string } = {} as T;
+    let parsedJson = false;
 
     if (rawBody) {
       try {
         body = JSON.parse(rawBody) as T;
+        parsedJson = true;
       } catch {
-        throw new BadGatewayException('Invalid JSON response received from Vandar');
+        if (response.ok) {
+          throw new BadGatewayException('Invalid JSON response received from Vandar');
+        }
       }
     }
 
     if (!response.ok) {
-      const message =
-        (body as { message?: string }).message ??
-        `Vandar request failed with status ${response.status}`;
+      const providerMessage =
+        parsedJson && body && typeof body === 'object'
+          ? ((body as { message?: string; errors?: unknown }).message ??
+            JSON.stringify((body as { errors?: unknown }).errors ?? body))
+          : rawBody;
+      const message = providerMessage
+        ? `Vandar request failed with status ${response.status}: ${providerMessage}`
+        : `Vandar request failed with status ${response.status}`;
       throw new BadGatewayException(message);
     }
 

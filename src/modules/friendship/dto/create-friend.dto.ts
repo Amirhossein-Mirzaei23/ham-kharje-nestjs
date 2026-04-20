@@ -1,4 +1,5 @@
 export class CreateFriendDto {
-  phone: string;
+  phone!: string;
   group?: string;
 }
+

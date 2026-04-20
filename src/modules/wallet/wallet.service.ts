@@ -1,29 +1,31 @@
 import {
   BadRequestException,
   Injectable,
+  InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { randomUUID } from 'crypto';
 import { DataSource, EntityManager, Repository } from 'typeorm';
+import { Bill } from '../bills-management/entities/bill.entity';
 import { User } from '../users/entities/user.entity';
 import { ChargeWalletDto } from './dto/charge-wallet.dto';
-import { TransferWalletDto } from './dto/transfer-wallet.dto';
 import { VandarPaymentCallbackDto } from './dto/vandar-payment-callback.dto';
+import { TransferWalletDto } from './dto/transfer-wallet.dto';
 import { WithdrawWalletDto } from './dto/withdraw-wallet.dto';
-import { WalletNotFoundException } from './exceptions/wallet-not-found.exception';
-import { InsufficientBalanceException } from './exceptions/insufficient-balance.exception';
+import { PayBillDto } from './application/dto/pay-bill.dto';
 import { Wallet } from './domain/entities/wallet.entity';
 import { WalletTransaction } from './domain/entities/wallet-transaction.entity';
 import { TransactionStatus } from './domain/enums/transaction-status.enum';
 import { TransactionType } from './domain/enums/transaction-type.enum';
+import { InsufficientBalanceException } from './exceptions/insufficient-balance.exception';
+import { WalletNotFoundException } from './exceptions/wallet-not-found.exception';
 import { VandarService } from './infrastructure/vandar.service';
 
 @Injectable()
 export class WalletService {
   constructor(
     private readonly dataSource: DataSource,
-    // private readonly logger = new Logger(),
     private readonly vandarService: VandarService,
     @InjectRepository(Wallet)
     private readonly walletRepository: Repository<Wallet>,
@@ -95,70 +97,226 @@ export class WalletService {
     };
   }
 
-  async handlePaymentCallback(dto: VandarPaymentCallbackDto) {
-    return this.dataSource.transaction(async (manager) => {
-      const transactionRepository = manager.getRepository(WalletTransaction);
-      const walletRepository = manager.getRepository(Wallet);
+  async payBill(billId: number, payerUserId: number, dto: PayBillDto) {
+    await this.ensureUserExists(payerUserId);
 
-      const transaction = await transactionRepository.findOne({
-        where: {
-          referenceId: dto.token,
-          type: TransactionType.CHARGE_WALLET,
+    const prepared = await this.dataSource.transaction(async (manager) => {
+      const bill = await this.findBillForUpdate(manager, billId);
+      this.ensureBillCanBePaidByUser(bill, payerUserId);
+      this.ensureBillPaymentAmount(bill, dto.amount);
+
+      const [payerWallet, creditorWallet] = await this.findWalletPairForUpdate(
+        manager,
+        payerUserId,
+        bill.creditor.id,
+      );
+      const transactionRepository = manager.getRepository(WalletTransaction);
+
+      if (payerWallet.balance >= dto.amount) {
+        payerWallet.balance -= dto.amount;
+        creditorWallet.balance += dto.amount;
+        this.applyBillPayment(bill, dto.amount);
+
+        await manager.save(Wallet, [payerWallet, creditorWallet]);
+        await manager.save(Bill, bill);
+
+        const referenceId = randomUUID();
+        const debit = transactionRepository.create({
+          walletId: payerWallet.id,
+          paidByUserId: payerUserId,
+          paidToUserId: bill.creditor.id,
+          billId: bill.id,
+          amount: dto.amount,
+          gateway: null,
+          referenceId,
+          type: TransactionType.DEBIT,
+          status: TransactionStatus.SUCCESS,
+          meta: {
+            source: 'bill_payment_wallet',
+            creditorWalletId: creditorWallet.id,
+            billTitle: bill.title,
+          },
+        });
+
+        const credit = transactionRepository.create({
+          walletId: creditorWallet.id,
+          paidByUserId: payerUserId,
+          paidToUserId: bill.creditor.id,
+          billId: bill.id,
+          amount: dto.amount,
+          gateway: null,
+          referenceId,
+          type: TransactionType.CREDIT,
+          status: TransactionStatus.SUCCESS,
+          meta: {
+            source: 'bill_payment_wallet',
+            payerWalletId: payerWallet.id,
+            billTitle: bill.title,
+          },
+        });
+
+        await transactionRepository.save([debit, credit]);
+
+        return {
+          mode: 'WALLET' as const,
+          bill,
+          payerWallet,
+          creditorWallet,
+          referenceId,
+          debit,
+          credit,
+        };
+      }
+
+      const pendingReference = randomUUID();
+      const pendingTransaction = transactionRepository.create({
+        walletId: payerWallet.id,
+        paidByUserId: payerUserId,
+        paidToUserId: bill.creditor.id,
+        billId: bill.id,
+        amount: dto.amount,
+        gateway: 'VANDAR',
+        referenceId: pendingReference,
+        type: TransactionType.PAY_BILLS,
+        status: TransactionStatus.PENDING,
+        meta: {
+          source: 'bill_payment_gateway',
+          pendingReference,
+          callbackUrl: this.buildWalletCallbackUrl(),
+          billTitle: bill.title,
+          debtorId: bill.debtor.id,
+          creditorId: bill.creditor.id,
+          requestedByUserId: payerUserId,
+          gatewayRequest: null,
         },
-        relations: ['wallet'],
+      });
+
+      await transactionRepository.save(pendingTransaction);
+
+      return {
+        mode: 'GATEWAY' as const,
+        bill,
+        payerWallet,
+        pendingTransaction,
+      };
+    });
+
+    if (prepared.mode === 'WALLET') {
+      return {
+        success: true,
+        paymentMode: 'WALLET_BALANCE',
+        status: 'SUCCESS',
+        bill: this.buildBillPaymentSnapshot(prepared.bill),
+        wallet: {
+          payerBalance: prepared.payerWallet.balance,
+          creditorBalance: prepared.creditorWallet.balance,
+        },
+        transactions: {
+          referenceId: prepared.referenceId,
+          debitTransactionId: prepared.debit.id,
+          creditTransactionId: prepared.credit.id,
+        },
+      };
+    }
+
+    try {
+      const callbackUrl = this.buildWalletCallbackUrl();
+      const payment = await this.vandarService.createPaymentToken({
+        amount: dto.amount,
+        callbackUrl,
+        mobileNumber: dto.mobileNumber,
+        factorNumber: dto.factorNumber ?? prepared.pendingTransaction.id,
+        description: dto.description ?? `Bill payment for #${prepared.bill.id}`,
+        validCardNumbers: dto.validCardNumbers,
+        comment: dto.comment,
+      });
+
+      prepared.pendingTransaction.referenceId = payment.token;
+      prepared.pendingTransaction.meta = {
+        ...(prepared.pendingTransaction.meta ?? {}),
+        callbackUrl,
+        factorNumber: dto.factorNumber ?? prepared.pendingTransaction.id,
+        paymentToken: payment.token,
+        paymentRequest: payment.raw,
+      };
+
+      await this.transactionRepository.save(prepared.pendingTransaction);
+
+      return {
+        success: true,
+        paymentMode: 'VANDAR_GATEWAY',
+        status: prepared.pendingTransaction.status,
+        bill: this.buildBillPaymentSnapshot(prepared.bill),
+        wallet: {
+          payerBalance: prepared.payerWallet.balance,
+          shortfall: Math.max(0, dto.amount - prepared.payerWallet.balance),
+        },
+        gateway: {
+          transactionId: prepared.pendingTransaction.id,
+          paymentToken: payment.token,
+          paymentUrl: payment.paymentUrl,
+        },
+      };
+    } catch (error) {
+      prepared.pendingTransaction.status = TransactionStatus.FAILED;
+      prepared.pendingTransaction.meta = {
+        ...(prepared.pendingTransaction.meta ?? {}),
+        gatewayError: this.serializeError(error),
+      };
+      await this.transactionRepository.save(prepared.pendingTransaction);
+      throw error;
+    }
+  }
+
+  async handlePaymentCallback(dto: VandarPaymentCallbackDto) {
+    if (dto.payment_status !== 'OK') {
+      return this.failGatewayTransaction(dto);
+    }
+
+    const verification = await this.vandarService.verifyPayment(dto.token);
+
+    return this.dataSource.transaction(async (manager) => {
+      const transaction = await manager.getRepository(WalletTransaction).findOne({
+        where: { referenceId: dto.token },
         lock: { mode: 'pessimistic_write' },
       });
 
       if (!transaction) {
-        throw new NotFoundException('Charge transaction was not found');
+        throw new NotFoundException('Transaction was not found');
       }
 
       if (transaction.status === TransactionStatus.SUCCESS) {
         return {
+          success: true,
+          paymentMode:
+            transaction.type === TransactionType.PAY_BILLS
+              ? 'VANDAR_GATEWAY'
+              : 'WALLET_TOP_UP',
           transactionId: transaction.id,
           status: transaction.status,
           alreadyProcessed: true,
         };
       }
 
-      if (dto.payment_status !== 'OK') {
-        transaction.status = TransactionStatus.FAILED;
-        transaction.meta = {
-          ...(transaction.meta ?? {}),
-          callback: dto,
-        };
-        await transactionRepository.save(transaction);
-
-        return {
-          transactionId: transaction.id,
-          status: transaction.status,
-          verified: false,
-        };
+      if (transaction.type === TransactionType.CHARGE_WALLET) {
+        return this.finalizeWalletChargeCallback(
+          manager,
+          transaction,
+          dto,
+          verification,
+        );
       }
 
-      const verification = await this.vandarService.verifyPayment(dto.token);
-
-      if (!transaction.walletId) {
-        throw new WalletNotFoundException();
+      if (transaction.type === TransactionType.PAY_BILLS) {
+        return this.finalizeBillGatewayCallback(
+          manager,
+          transaction,
+          dto,
+          verification,
+        );
       }
 
-      await walletRepository.increment({ id: transaction.walletId }, 'balance', transaction.amount);
-
-      transaction.status = TransactionStatus.SUCCESS;
-      transaction.meta = {
-        ...(transaction.meta ?? {}),
-        callback: dto,
-        verification,
-      };
-
-      await transactionRepository.save(transaction);
-
-      return {
-        transactionId: transaction.id,
-        status: transaction.status,
-        verified: true,
-        amount: transaction.amount,
-      };
+      throw new BadRequestException('Unsupported callback transaction type');
     });
   }
 
@@ -279,25 +437,21 @@ export class WalletService {
 
       await transactionRepository.save(payoutTransaction);
 
-      try {
-        const settlement = await this.vandarService.createSettlement(
-          dto.amount,
-          iban,
-          payoutReference,
-          {
-            description: dto.reason ?? `Wallet payout for user ${userId}`,
-            name: user.name,
-          },
-        );
+      const settlement = await this.vandarService.createSettlement(
+        dto.amount,
+        iban,
+        payoutReference,
+        {
+          description: dto.reason ?? `Wallet payout for user ${userId}`,
+          name: user.name,
+        },
+      );
 
-        payoutTransaction.meta = {
-          ...(payoutTransaction.meta ?? {}),
-          settlement,
-        };
-        await transactionRepository.save(payoutTransaction);
-      } catch (error) {
-        throw error;
-      }
+      payoutTransaction.meta = {
+        ...(payoutTransaction.meta ?? {}),
+        settlement,
+      };
+      await transactionRepository.save(payoutTransaction);
 
       return {
         transactionId: payoutTransaction.id,
@@ -308,6 +462,159 @@ export class WalletService {
         balance: wallet.balance,
       };
     });
+  }
+
+  private async failGatewayTransaction(dto: VandarPaymentCallbackDto) {
+    return this.dataSource.transaction(async (manager) => {
+      const transaction = await manager.getRepository(WalletTransaction).findOne({
+        where: { referenceId: dto.token },
+        lock: { mode: 'pessimistic_write' },
+      });
+
+      if (!transaction) {
+        throw new NotFoundException('Transaction was not found');
+      }
+
+      if (transaction.status === TransactionStatus.SUCCESS) {
+        return {
+          success: true,
+          transactionId: transaction.id,
+          status: transaction.status,
+          alreadyProcessed: true,
+        };
+      }
+
+      transaction.status = TransactionStatus.FAILED;
+      transaction.meta = {
+        ...(transaction.meta ?? {}),
+        callback: dto,
+      };
+      await manager.save(WalletTransaction, transaction);
+
+      return {
+        success: false,
+        paymentMode:
+          transaction.type === TransactionType.PAY_BILLS
+            ? 'VANDAR_GATEWAY'
+            : 'WALLET_TOP_UP',
+        transactionId: transaction.id,
+        status: transaction.status,
+        verified: false,
+      };
+    });
+  }
+
+  private async finalizeWalletChargeCallback(
+    manager: EntityManager,
+    transaction: WalletTransaction,
+    dto: VandarPaymentCallbackDto,
+    verification: Record<string, unknown>,
+  ) {
+    if (!transaction.walletId) {
+      throw new WalletNotFoundException();
+    }
+
+    const wallet = await manager.getRepository(Wallet).findOne({
+      where: { id: transaction.walletId },
+      lock: { mode: 'pessimistic_write' },
+    });
+
+    if (!wallet) {
+      throw new WalletNotFoundException();
+    }
+
+    wallet.balance += transaction.amount;
+    await manager.save(Wallet, wallet);
+
+    transaction.status = TransactionStatus.SUCCESS;
+    transaction.meta = {
+      ...(transaction.meta ?? {}),
+      callback: dto,
+      verification,
+    };
+    await manager.save(WalletTransaction, transaction);
+
+    return {
+      success: true,
+      paymentMode: 'WALLET_TOP_UP',
+      transactionId: transaction.id,
+      status: transaction.status,
+      verified: true,
+      amount: transaction.amount,
+      wallet: {
+        walletId: wallet.id,
+        balance: wallet.balance,
+      },
+    };
+  }
+
+  private async finalizeBillGatewayCallback(
+    manager: EntityManager,
+    transaction: WalletTransaction,
+    dto: VandarPaymentCallbackDto,
+    verification: Record<string, unknown>,
+  ) {
+    if (!transaction.billId || !transaction.paidToUserId) {
+      throw new BadRequestException('Bill payment transaction is incomplete');
+    }
+
+    const bill = await this.findBillForUpdate(manager, transaction.billId);
+    this.ensureBillPaymentAmount(bill, transaction.amount);
+
+    const creditorWallet = await this.findWalletForUpdateByUserId(
+      manager,
+      transaction.paidToUserId,
+    );
+
+    creditorWallet.balance += transaction.amount;
+    this.applyBillPayment(bill, transaction.amount);
+
+    const creditTransaction = manager.getRepository(WalletTransaction).create({
+      walletId: creditorWallet.id,
+      paidByUserId: transaction.paidByUserId,
+      paidToUserId: transaction.paidToUserId,
+      billId: transaction.billId,
+      amount: transaction.amount,
+      gateway: 'VANDAR',
+      referenceId: transaction.referenceId,
+      type: TransactionType.CREDIT,
+      status: TransactionStatus.SUCCESS,
+      meta: {
+        source: 'bill_payment_gateway_credit',
+        sourceTransactionId: transaction.id,
+        verification,
+      },
+    });
+
+    await manager.save(Wallet, creditorWallet);
+    await manager.save(Bill, bill);
+    await manager.save(WalletTransaction, creditTransaction);
+
+    transaction.status = TransactionStatus.SUCCESS;
+    transaction.meta = {
+      ...(transaction.meta ?? {}),
+      callback: dto,
+      verification,
+      creditTransactionId: creditTransaction.id,
+    };
+    await manager.save(WalletTransaction, transaction);
+
+    return {
+      success: true,
+      paymentMode: 'VANDAR_GATEWAY',
+      transactionId: transaction.id,
+      status: transaction.status,
+      verified: true,
+      bill: this.buildBillPaymentSnapshot(bill),
+      wallet: {
+        creditorWalletId: creditorWallet.id,
+        creditorBalance: creditorWallet.balance,
+      },
+      transactions: {
+        pendingTransactionId: transaction.id,
+        creditTransactionId: creditTransaction.id,
+      },
+    };
   }
 
   private async ensureUserExists(userId: number): Promise<void> {
@@ -322,6 +629,85 @@ export class WalletService {
     if (balance < amount) {
       throw new InsufficientBalanceException();
     }
+  }
+
+  private ensureBillCanBePaidByUser(bill: Bill, payerUserId: number): void {
+    if (bill.debtor.id !== payerUserId) {
+      throw new BadRequestException('Only the bill debtor can pay this bill');
+    }
+  }
+
+  private ensureBillPaymentAmount(bill: Bill, amount: number): void {
+    const remainingAmount = Math.max(0, bill.amount - bill.paid);
+
+    if (bill.isPaid || remainingAmount <= 0) {
+      throw new BadRequestException('Bill is already fully paid');
+    }
+
+    if (amount > remainingAmount) {
+      throw new BadRequestException(
+        `Payment amount exceeds remaining balance of ${remainingAmount}`,
+      );
+    }
+  }
+
+  private applyBillPayment(bill: Bill, amount: number): void {
+    bill.paid += amount;
+    bill.isPaid = bill.paid >= bill.amount;
+  }
+
+  private buildBillPaymentSnapshot(bill: Bill) {
+    return {
+      id: bill.id,
+      title: bill.title,
+      amount: bill.amount,
+      paid: bill.paid,
+      remainingAmount: Math.max(0, bill.amount - bill.paid),
+      isPaid: bill.isPaid,
+      creditorId: bill.creditor?.id,
+      debtorId: bill.debtor?.id,
+    };
+  }
+
+  private async findBillForUpdate(
+    manager: EntityManager,
+    billId: number,
+  ): Promise<Bill> {
+    const bill = await manager
+      .getRepository(Bill)
+      .createQueryBuilder('bill')
+      .innerJoinAndSelect('bill.creditor', 'creditor')
+      .innerJoinAndSelect('bill.debtor', 'debtor')
+      .where('bill.id = :billId', { billId })
+      .setLock('pessimistic_write')
+      .getOne();
+
+    if (!bill) {
+      throw new NotFoundException('Bill not found');
+    }
+
+    return bill;
+  }
+
+  private async findWalletPairForUpdate(
+    manager: EntityManager,
+    firstUserId: number,
+    secondUserId: number,
+  ): Promise<[Wallet, Wallet]> {
+    if (firstUserId === secondUserId) {
+      const wallet = await this.findWalletForUpdateByUserId(manager, firstUserId);
+      return [wallet, wallet];
+    }
+
+    const [smallUserId, largeUserId] = [firstUserId, secondUserId].sort(
+      (left, right) => left - right,
+    );
+    const firstWallet = await this.findWalletForUpdateByUserId(manager, smallUserId);
+    const secondWallet = await this.findWalletForUpdateByUserId(manager, largeUserId);
+
+    return firstWallet.userId === firstUserId
+      ? [firstWallet, secondWallet]
+      : [secondWallet, firstWallet];
   }
 
   private async findWalletForUpdateByUserId(
@@ -340,6 +726,16 @@ export class WalletService {
     return wallet;
   }
 
+  private buildWalletCallbackUrl(): string {
+    const baseUrl = process.env.Site_BASE_URL;
+    if (!baseUrl) {
+      throw new InternalServerErrorException('Site_BASE_URL is not configured');
+    }
+
+    const normalizedBase = this.normalizeCallbackUrl(baseUrl);
+    return new URL('/wallet/callback', normalizedBase).toString();
+  }
+
   private normalizeCallbackUrl(callbackUrl: string): string {
     const trimmed = callbackUrl.trim();
     const normalized = /^https?:\/\//i.test(trimmed)
@@ -353,5 +749,16 @@ export class WalletService {
     } catch {
       throw new BadRequestException('callbackUrl is invalid');
     }
+  }
+
+  private serializeError(error: unknown) {
+    if (error instanceof Error) {
+      return {
+        name: error.name,
+        message: error.message,
+      };
+    }
+
+    return { message: 'Unknown gateway error' };
   }
 }

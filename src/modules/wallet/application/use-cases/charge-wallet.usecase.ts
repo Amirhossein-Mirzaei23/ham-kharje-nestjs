@@ -33,7 +33,7 @@ export class ChargeWalletUseCase {
 
     const result = await payment.request({
       amount,
-      callbackUrl: `${process.env.BASE_URL}/wallet/payment/callback`,
+      callbackUrl: `${process.env.Site_BASE_URL}/wallet/payment/callback`,
       description: 'Wallet Charge',
       referenceId: tx.id,
     });

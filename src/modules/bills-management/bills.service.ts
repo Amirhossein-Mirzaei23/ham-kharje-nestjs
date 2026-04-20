@@ -4,14 +4,15 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Bill } from './entities/bill.entity';
-import { User } from '../users/entities/user.entity';
-import { Group } from '../groups/entities/group.entity';
 import { Repository } from 'typeorm';
-import { CreateBillDto } from './dto/bills.dto';
 import { GroupMembership } from '../friendship/entities/groupMembership.entity';
-import { WalletTransactionService } from '../wallet/application/services/wallet-transaction.service';
-import { TransactionType } from '../wallet/domain/enums/transaction-type.enum';
+import { Group } from '../groups/entities/group.entity';
+import { User } from '../users/entities/user.entity';
+import { PayBillDto } from '../wallet/application/dto/pay-bill.dto';
+import { WalletService } from '../wallet/wallet.service';
+import { CreateBillDto } from './dto/bills.dto';
+import { Bill } from './entities/bill.entity';
+import { DeleteBillDto } from '../wallet/application/dto/delete-bill.dto';
 
 @Injectable()
 export class BillService {
@@ -21,21 +22,23 @@ export class BillService {
     @InjectRepository(Group) private groupRepo: Repository<Group>,
     @InjectRepository(GroupMembership)
     private groupMembershipRepo: Repository<GroupMembership>,
-    private readonly walletTransactionService: WalletTransactionService,
+    private readonly walletService: WalletService,
   ) {}
 
   async createBill(dto: CreateBillDto) {
     const creditor = await this.userRepo.findOneBy({ id: dto.creditorId });
     if (!creditor) throw new NotFoundException('Creditor not found');
-    // No group, debtorId is required
-    if (!dto.debtorId)
+    if (!dto.debtorId) {
       throw new NotFoundException('Debtor id is required if no group');
-    let group;
+    }
+
+    let group: Group | null = null;
     if (dto.groupId) {
       group = await this.groupRepo.findOne({
         where: { id: dto.groupId },
       });
     }
+
     const debtor = await this.userRepo.findOne({
       where: { id: dto.debtorId },
     });
@@ -45,7 +48,7 @@ export class BillService {
     const bill = this.billRepo.create({
       creditor,
       debtor,
-      group: group,
+      group: group ?? undefined,
       title: dto.title,
       amount: dto.amount,
       paid: dto.paid ? dto.paid : 0,
@@ -53,10 +56,10 @@ export class BillService {
       referenceId: dto.referenceId,
       totalAmount: dto.totalAmount,
     });
-    const data = await this.billRepo.save(bill);
 
-    return data;
+    return this.billRepo.save(bill);
   }
+
   async createGropuBill(dto: CreateBillDto) {
     const creditor = await this.userRepo.findOne({
       where: { id: dto.creditorId },
@@ -64,31 +67,32 @@ export class BillService {
     if (!creditor) throw new NotFoundException('Creditor not found');
 
     let group: Group | null = null;
-    let bills: Array<Bill> = [];
+    const bills: Bill[] = [];
 
-    if (dto.groupId) {
+    if (!dto.groupId) {
       throw new NotFoundException('Group not found');
     }
+
     group = await this.groupRepo.findOne({
       where: { id: dto.groupId },
       relations: ['members'],
     });
     if (!group) throw new NotFoundException('Group not found');
-    if (!dto.title)
+    if (!dto.title) {
       throw new BadRequestException('برای بدهی عنوان انتخاب فرمایید.');
-    // Get group members
+    }
+
     const memberships = await this.groupMembershipRepo.find({
       where: { group: { id: group.id } },
       relations: ['user'],
     });
-    if (!memberships || memberships.length === 0)
+    if (!memberships || memberships.length === 0) {
       throw new NotFoundException('No members in group');
+    }
 
-    // Divide amount equally
     const share = Number(dto.amount) / memberships.length;
 
     for (const membership of memberships) {
-      // Skip creditor if they are also a member
       if (membership.user.id === creditor.id) continue;
 
       const debtor = await this.userRepo.findOne({
@@ -96,43 +100,24 @@ export class BillService {
       });
       if (!debtor) continue;
 
-      const bill = this.billRepo.create({
-        creditor,
-        debtor,
-        title: dto.title,
-        group,
-        amount: share,
-        paid: 0,
-        isPaid: false,
-      });
-      bills.push(bill);
+      bills.push(
+        this.billRepo.create({
+          creditor,
+          debtor,
+          title: dto.title,
+          group,
+          amount: share,
+          paid: 0,
+          isPaid: false,
+        }),
+      );
     }
-    const data = this.billRepo.save(bills);
-    return data;
+
+    return this.billRepo.save(bills);
   }
-  async payBill(billId: number, amount: number, payerUserId: number) {
-    const bill = await this.billRepo.findOne({
-      where: { id: billId },
-      relations: ['creditor', 'debtor'],
-    });
-    if (!bill) throw new NotFoundException('Bill not found');
 
-    bill.paid += amount;
-    if (bill.paid >= bill.amount) bill.isPaid = true;
-
-    const updatedBill = await this.billRepo.save(bill);
-
-    const transaction = await this.walletTransactionService.recordBillPayment(
-      billId,
-      amount,
-      payerUserId,
-      TransactionType.PAY_BILLS
-    );
-
-    return {
-      bill: updatedBill,
-      transaction,
-    };
+  async payBill(billId: number, payerUserId: number, dto: PayBillDto) {
+    return this.walletService.payBill(billId, payerUserId, dto);
   }
 
   async listUserDebts(userId: number) {
@@ -142,14 +127,28 @@ export class BillService {
     });
   }
 
-  async deleteBill(referenceId:string) {
-    const result = await this.billRepo.delete({referenceId:referenceId});
+async deleteBill(payload: DeleteBillDto) {
+  const bill = await this.billRepo.findOne({
+    where: { referenceId: payload.referenceId },
+    relations: ['creditor'],
+  });
+
+  if (!bill) {
+    throw new NotFoundException('تراکنش یافت نشد');
+  }
+
+  if (bill.creditor.id !== payload.userId) {
+    throw new BadRequestException('فقط ایجاد کننده تراکنش میتواند این تراکنش را حذف کند.');
+  }
+
+  const result = await this.billRepo.delete({referenceId:payload.referenceId});
     if (!result.affected) {
       throw new NotFoundException('Bill not found');
     }
+  return {
+    message: 'تراکنش با موفقیت حذف شد',
+    data:result
+  };
+}
 
-    return {
-      message: 'Bill deleted successfully',
-    };
-  }
 }
