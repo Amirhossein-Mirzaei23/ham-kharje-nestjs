@@ -37,9 +37,9 @@ export class VandarService {
       'VANDAR_IPG_BASE_URL',
       'https://ipg.vandar.io',
     );
-    this.business = this.configService.get<string>('VANDAR_BUSINESS', '');
-    this.accessToken = this.configService.get<string>('VANDAR_ACCESS_TOKEN', '');
-    this.ipgApiKey = this.configService.get<string>('VANDAR_IPG_API_KEY', '');
+    this.business = this.configService.get<string>('VANDAR_BUSINESS', process.env.VANDAR_BUSINESS || '');
+    this.accessToken = this.configService.get<string>('VANDAR_ACCESS_TOKEN', process.env.VANDAR_ACCESS_TOKEN || '');
+    this.ipgApiKey = this.configService.get<string>('VANDAR_IPG_API_KEY', process.env.VANDAR_IPG_API_KEY || '');
   }
 
   async createPaymentToken(payload: VandarChargeRequest): Promise<{
@@ -48,7 +48,8 @@ export class VandarService {
     raw: Record<string, unknown>;
   }> {
     this.ensureIpgApiKey();
-
+    console.log('call vandar');
+    
     const result = await this.request<{
       status: number;
       token?: string;
@@ -71,7 +72,8 @@ export class VandarService {
         comment: payload.comment,
       }),
     });
-
+    console.log('result22:',result);
+    
     if (result.status !== 1 || !result.token) {
       throw new BadGatewayException(
         result.message ?? 'Vandar did not return a valid payment token',

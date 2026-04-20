@@ -1,4 +1,5 @@
 import { Controller, Get, Query } from "@nestjs/common";
+import { Public } from "src/common/decorators/public.decorator";
 import { VerifyPaymentUseCase } from "../application/use-cases/verify-payment.usecase";
 
 // presentation/payment.controller.ts
@@ -10,6 +11,7 @@ export class PaymentController {
    * Example:
    * /payment/callback?Authority=xxx&Status=OK
    */
+  @Public()
   @Get('callback')
   async callback(@Query() query: any) {
     const { Authority, Status } = query;

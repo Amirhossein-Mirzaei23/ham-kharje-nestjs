@@ -245,14 +245,34 @@ export class GroupsService {
       relations: ['owner'],
     });
     if (!group) throw new NotFoundException('Group not found');
+    if(!friendId) throw new NotFoundException('عضو مورد نظر یافت نشد')
     if (!group.owner || group.owner.id !== ownerId)
-      throw new ForbiddenException('Only owner can remove friends');
+      throw new ForbiddenException('فقط مالک گروه اجازه حذف اعضا را دارد.');
 
     const membership = await this.groupMembershipRepo.findOne({
       where: { group: { id: groupId }, user: { id: friendId } },
     });
     if (!membership)
       throw new NotFoundException('Friend is not part of this group');
+
+    await this.groupMembershipRepo.remove(membership);
+    return { ok: true };
+  }
+ async leftFromGroup(groupId: number,
+    userId: number,){
+    const group = await this.groupRepo.findOne({
+      where: { id: groupId },
+      relations: ['owner'],
+    });
+    if (!group) throw new NotFoundException('Group not found');
+    if(!userId) throw new NotFoundException('عضو مورد نظر یافت نشد')
+
+    const membership = await this.groupMembershipRepo.findOne({
+      where: { group: { id: groupId }, user: { id: userId } },
+    });
+    if (!membership)
+      throw new NotFoundException('Friend is not part of this group');
+
     await this.groupMembershipRepo.remove(membership);
     return { ok: true };
   }
@@ -409,12 +429,11 @@ export class GroupsService {
     });
 
     if (!group) throw new NotFoundException('Group not found');
-    console.log('bills old',group.bills[0]);
+
     group.bills = group.bills.sort((a, b) => {
       return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     });
-    console.log('bills',group.bills[0]);
-    
+
     const data = {
       group: {
         id: group.id,

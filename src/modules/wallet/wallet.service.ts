@@ -23,6 +23,7 @@ import { VandarService } from './infrastructure/vandar.service';
 export class WalletService {
   constructor(
     private readonly dataSource: DataSource,
+    // private readonly logger = new Logger(),
     private readonly vandarService: VandarService,
     @InjectRepository(Wallet)
     private readonly walletRepository: Repository<Wallet>,
@@ -54,10 +55,11 @@ export class WalletService {
 
   async chargeWallet(userId: number, dto: ChargeWalletDto) {
     const wallet = await this.getWalletByUserId(userId);
+    const callbackUrl = this.normalizeCallbackUrl(dto.callbackUrl);
 
     const payment = await this.vandarService.createPaymentToken({
       amount: dto.amount,
-      callbackUrl: dto.callbackUrl,
+      callbackUrl,
       mobileNumber: dto.mobileNumber,
       factorNumber: dto.factorNumber,
       description: dto.description ?? 'Wallet top-up',
@@ -77,7 +79,7 @@ export class WalletService {
         type: TransactionType.CHARGE_WALLET,
         status: TransactionStatus.PENDING,
         meta: {
-          callbackUrl: dto.callbackUrl,
+          callbackUrl,
           factorNumber: dto.factorNumber ?? null,
           paymentToken: payment.token,
           paymentRequest: payment.raw,
@@ -336,5 +338,20 @@ export class WalletService {
     }
 
     return wallet;
+  }
+
+  private normalizeCallbackUrl(callbackUrl: string): string {
+    const trimmed = callbackUrl.trim();
+    const normalized = /^https?:\/\//i.test(trimmed)
+      ? trimmed
+      : trimmed.startsWith('localhost') || trimmed.startsWith('127.0.0.1')
+        ? `http://${trimmed}`
+        : `https://${trimmed}`;
+
+    try {
+      return new URL(normalized).toString();
+    } catch {
+      throw new BadRequestException('callbackUrl is invalid');
+    }
   }
 }

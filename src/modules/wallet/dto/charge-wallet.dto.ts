@@ -13,10 +13,10 @@ import {
 export class ChargeWalletDto {
   @IsInt()
   @Min(1000)
-  amount: number;
+  amount!: number;
 
   @IsUrl({ require_tld: false }, { message: 'callbackUrl must be a valid URL' })
-  callbackUrl: string;
+  callbackUrl!: string;
 
   @IsOptional()
   @IsMobilePhone('fa-IR')

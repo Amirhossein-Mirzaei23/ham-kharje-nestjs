@@ -8,6 +8,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
+import { Public } from 'src/common/decorators/public.decorator';
 import { GetUserId } from 'src/modules/authentication/get-user.decorator';
 import { JwtAuthGuard } from 'src/modules/authentication/jwt-auth.guard';
 import { ChargeWalletDto } from '../dto/charge-wallet.dto';
@@ -26,6 +27,7 @@ export class WalletController {
     return this.walletService.chargeWallet(userId, dto);
   }
 
+  @Public()
   @Get('callback')
   handleCallback(@Query() dto: VandarPaymentCallbackDto) {
     return this.walletService.handlePaymentCallback(dto);

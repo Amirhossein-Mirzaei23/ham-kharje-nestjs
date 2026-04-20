@@ -66,6 +66,17 @@ export class GroupsController {
     );
   }
 
+  @Post(':id/left-user')
+  left(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: { userId: number },
+  ) {
+    return this.groupsService.leftFromGroup(
+      id,
+      body.userId,
+    );
+  }
+
   @Post(':id/assign-bill')
   assignBillToGroup(
     @Param('id', ParseIntPipe) id: number,
